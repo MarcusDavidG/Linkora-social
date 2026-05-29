@@ -187,6 +187,16 @@ pub struct PoolWithdrawEvent {
 
 #[contractevent]
 #[derive(Clone)]
+pub struct PoolCreatedEvent {
+    #[topic]
+    pub pool_id: Symbol,
+    pub token: Address,
+    pub threshold: u32,
+    pub admin_count: u32,
+}
+
+#[contractevent]
+#[derive(Clone)]
 pub struct LikePostEvent {
     #[topic]
     pub user: Address,
@@ -752,12 +762,14 @@ impl LinkoraContract {
     ) {
         admin.require_auth();
         Self::require_admin(&env);
-        let key = StorageKey::Pool(pool_id);
+        let admin_count = initial_admins.len();
+        let key = StorageKey::Pool(pool_id.clone());
         assert!(!env.storage().persistent().has(&key), "pool exists");
         assert!(
             threshold > 0 && threshold <= initial_admins.len(),
             "invalid threshold"
         );
+        let token_copy = token.clone();
         env.storage().persistent().set(
             &key,
             &Pool {
@@ -768,6 +780,14 @@ impl LinkoraContract {
             },
         );
         Self::bump(&env, &key);
+
+        PoolCreatedEvent {
+            pool_id,
+            token: token_copy,
+            threshold,
+            admin_count,
+        }
+        .publish(&env);
     }
 
     pub fn pool_deposit(

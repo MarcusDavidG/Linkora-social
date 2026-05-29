@@ -138,6 +138,18 @@ Emitted when tokens are withdrawn from a community pool.
   - `pool_id`: `Symbol`
   - `amount`: `i128`
 
+### PoolCreated
+Emitted when a new community pool is created.
+
+- **Topic 0**: `Linkora`
+- **Topic 1**: `pool_created`
+- **Topic 2**: `v1`
+- **Data Payload**: `PoolCreatedEvent`
+  - `pool_id`: `Symbol`
+  - `token`: `Address`
+  - `threshold`: `u32`
+  - `admin_count`: `u32`
+
 ## Querying and Decoding
 
 ### Using Stellar CLI
