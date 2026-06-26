@@ -926,6 +926,31 @@ fn test_initialize_twice_panics() {
     client.initialize(&admin, &treasury, &0);
 }
 
+// A rejected re-initialize must leave the original configuration intact (#690).
+// `try_initialize` captures the failure without aborting the test so we can then
+// assert the stored treasury/fee were not overwritten by the second call.
+#[test]
+fn test_initialize_twice_preserves_state() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(LinkoraContract, ());
+    let client = LinkoraContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &treasury, &250);
+
+    // Attempt to re-initialize with different admin/treasury/fee — must fail.
+    let other_admin = Address::generate(&env);
+    let other_treasury = Address::generate(&env);
+    let result = client.try_initialize(&other_admin, &other_treasury, &999);
+    assert!(result.is_err());
+
+    // Original treasury and fee remain unchanged.
+    assert_eq!(client.get_treasury(), Some(treasury));
+    assert_eq!(client.get_fee_bps(), 250);
+}
+
 #[test]
 #[should_panic]
 fn test_upgrade_by_admin_succeeds() {
