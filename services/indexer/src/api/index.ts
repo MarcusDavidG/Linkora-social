@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import { Pool as PgPool } from "pg";
 import { Database } from "../db";
 import { logger } from "../logger";
-import { rateLimit as apiLimiter } from "../middleware/rateLimit";
+import { rateLimit as apiLimiter, rateLimitWrite } from "../middleware/rateLimit";
 import { requireStellarAuth } from "../middleware/stellarAuth";
 import { createProfilesRouter } from "./routes/profiles";
 import { createPostsRouter } from "./routes/posts";
