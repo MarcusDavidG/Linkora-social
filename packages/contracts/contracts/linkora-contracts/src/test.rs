@@ -813,6 +813,35 @@ fn test_create_pool_emits_event() {
 }
 
 #[test]
+#[should_panic(expected = "pool exists")]
+fn test_create_pool_duplicate_id_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+
+    let pool_admin = Address::generate(&env);
+    let token = setup_token(&env, &pool_admin);
+
+    let pool_id = symbol_short!("test");
+    // First call should succeed
+    client.create_pool(
+        &admin,
+        &pool_id,
+        &token,
+        &vec![&env, pool_admin.clone()],
+        &1,
+    );
+    // Second call with same id should panic with "pool exists"
+    client.create_pool(
+        &admin,
+        &pool_id,
+        &token,
+        &vec![&env, pool_admin.clone()],
+        &1,
+    );
+}
+
+#[test]
 #[should_panic(expected = "insufficient signers")]
 fn test_pool_withdraw_insufficient_signers() {
     let env = Env::default();
