@@ -1,26 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const FRIENDLY_USERS = [
-  "stellar_dev", "crypto_enthusiast", "linkora_fan", "soroban_builder",
-  "defi_explorer", "nft_collector", "dao_member", "web3_builder",
-  "crypto_trader", "soroban_dev", "alice", "bob", "charlie", "dave",
-  "eve", "frank", "grace", "heidi", "ivan", "judy", "mallory", "oscar",
-  "peggy", "rupert", "sybil"
+  "stellar_dev",
+  "crypto_enthusiast",
+  "linkora_fan",
+  "soroban_builder",
+  "defi_explorer",
+  "nft_collector",
+  "dao_member",
+  "web3_builder",
+  "crypto_trader",
+  "soroban_dev",
+  "alice",
+  "bob",
+  "charlie",
+  "dave",
+  "eve",
+  "frank",
+  "grace",
+  "heidi",
+  "ivan",
+  "judy",
+  "mallory",
+  "oscar",
+  "peggy",
+  "rupert",
+  "sybil",
 ];
 
-const MOCK_USERS = Array.from({ length: 45 }, (_, i) => {
+const MOCK_USERS = Array.from({ length: 75 }, (_, i) => {
   const index = i + 1;
   const prefix = String.fromCharCode(65 + (i % 26));
-  const address = `G${prefix}${Array(53).fill('X').join('')}${index.toString().padStart(2, '0')}`;
+  const address = `G${prefix}${Array(53).fill("X").join("")}${index.toString().padStart(2, "0")}`;
   const username = i < FRIENDLY_USERS.length ? FRIENDLY_USERS[i] : `user_${index}`;
   return { address, username };
 });
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { address: string } }
+  { params }: { params: Promise<{ address: string }> }
 ) {
-  const { address } = params;
+  const { address } = await params;
   const searchParams = request.nextUrl.searchParams;
   const limit = parseInt(searchParams.get("limit") || "20", 10);
   const offset = parseInt(searchParams.get("offset") || "0", 10);
@@ -28,10 +48,13 @@ export async function GET(
   const indexerUrl = process.env.NEXT_PUBLIC_INDEXER_URL || "http://localhost:3001";
 
   try {
-    const res = await fetch(`${indexerUrl}/api/follows/${address}/following?limit=${limit}&offset=${offset}`, {
-      next: { revalidate: 0 }
-    });
-    
+    const res = await fetch(
+      `${indexerUrl}/api/follows/${address}/following?limit=${limit}&offset=${offset}`,
+      {
+        next: { revalidate: 0 },
+      }
+    );
+
     if (res.ok) {
       const data = await res.json();
       const enrichedFollowing = await Promise.all(
@@ -59,7 +82,7 @@ export async function GET(
     // Fallback
   }
 
-  const filteredMock = MOCK_USERS.filter(u => u.address.toLowerCase() !== address.toLowerCase());
+  const filteredMock = MOCK_USERS.filter((u) => u.address.toLowerCase() !== address.toLowerCase());
   const paginated = filteredMock.slice(offset, offset + limit);
 
   return NextResponse.json({

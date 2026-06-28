@@ -1,4 +1,4 @@
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from "@noble/hashes/sha256";
 
 export interface CredentialMerkleProof {
   root: Uint8Array;
@@ -7,7 +7,7 @@ export interface CredentialMerkleProof {
 
 function assertLeaf(leaf: Uint8Array): void {
   if (leaf.length !== 32) {
-    throw new Error('Credential Merkle leaves must be 32-byte SHA-256 hashes');
+    throw new Error("Credential Merkle leaves must be 32-byte SHA-256 hashes");
   }
 }
 
@@ -44,13 +44,13 @@ export function generateCredentialMerkleProof(
   targetLeafIndex: number
 ): CredentialMerkleProof {
   if (leaves.length === 0) {
-    throw new Error('Cannot build a credential Merkle proof for an empty tree');
+    throw new Error("Cannot build a credential Merkle proof for an empty tree");
   }
   if (targetLeafIndex < 0 || targetLeafIndex >= leaves.length) {
-    throw new Error('targetLeafIndex is out of bounds');
+    throw new Error("targetLeafIndex is out of bounds");
   }
 
-  let level = leaves.map((leaf) => {
+  let level: Uint8Array[] = leaves.map((leaf) => {
     assertLeaf(leaf);
     return new Uint8Array(leaf);
   });

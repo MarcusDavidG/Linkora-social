@@ -65,6 +65,7 @@ const TIP_COOLDOWN_WINDOW: Symbol = symbol_short!("TIP_CD_W");
 const REGISTERED_USERS: Symbol = symbol_short!("R_USERS");
 const RENT_RATE_BPS_KEY: Symbol = symbol_short!("RENT_BPS");
 const MODERATION_SLASH_BPS: Symbol = symbol_short!("MOD_SL_B");
+const CONTRACT_STATE: Symbol = symbol_short!("CT_STATE");
 
 // ── TTL Constants ─────────────────────────────────────────────────────────────
 //
@@ -123,6 +124,15 @@ pub struct Pool {
 }
 
 #[contracttype]
+#[derive(Clone, Debug)]
+pub struct ContractState {
+    /// Current contract schema / code version for migration tracking.
+    pub version: u32,
+    /// Last known implementation hash. Updated on each successful upgrade.
+    pub implementation_wasm_hash: Option<BytesN<32>>,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProposalStatus {
     Pending,
@@ -176,6 +186,7 @@ pub struct GovProposal {
     pub votes_for: u32,
     pub votes_against: u32,
     pub created_ledger: u32,
+    pub time_lock_ledgers: u32,
     pub status: GovStatus,
 }
 
@@ -340,6 +351,14 @@ pub struct PostDeleted {
     pub post_id: u64,
     #[topic]
     pub author: Address,
+}
+
+#[contractevent]
+#[derive(Clone)]
+pub struct ProfileDeletedEvent {
+    #[topic]
+    pub user: Address,
+    pub username: String,
 }
 
 #[contractevent]
@@ -602,6 +621,13 @@ impl LinkoraContract {
             .instance()
             .set(&TIP_COOLDOWN_WINDOW, &TIP_COOLDOWN_LEDGERS);
         env.storage().instance().set(&MODERATION_SLASH_BPS, &0u32);
+        env.storage().instance().set(
+            &CONTRACT_STATE,
+            &ContractState {
+                version: 1,
+                implementation_wasm_hash: None,
+            },
+        );
     }
 
     // ── Profiles ──────────────────────────────────────────────────────────────
@@ -726,6 +752,12 @@ impl LinkoraContract {
             .persistent()
             .get(&key)
             .unwrap_or_else(|| panic!("profile does not exist"));
+
+        ProfileDeletedEvent {
+            user: user.clone(),
+            username: profile.username.clone(),
+        }
+        .publish(&env);
 
         env.storage()
             .persistent()
@@ -866,6 +898,7 @@ impl LinkoraContract {
     pub fn follow(env: Env, follower: Address, followee: Address) {
         Self::bump_instance(&env);
         follower.require_auth();
+        Self::require_not_paused(&env);
 
         if Self::is_blocked(env.clone(), followee.clone(), follower.clone()) {
             panic!("blocked");
@@ -968,6 +1001,7 @@ impl LinkoraContract {
     pub fn unfollow(env: Env, follower: Address, followee: Address) {
         Self::bump_instance(&env);
         follower.require_auth();
+        Self::require_not_paused(&env);
 
         let edge_key = StorageKey::Edge(follower.clone(), followee.clone());
 
@@ -1138,6 +1172,7 @@ impl LinkoraContract {
     pub fn block_user(env: Env, blocker: Address, blocked: Address) {
         Self::bump_instance(&env);
         blocker.require_auth();
+        Self::require_not_paused(&env);
         let key = StorageKey::Blocks(blocker.clone());
         let mut blocks: Map<Address, ()> = env
             .storage()
@@ -1153,6 +1188,7 @@ impl LinkoraContract {
     pub fn unblock_user(env: Env, blocker: Address, blocked: Address) {
         Self::bump_instance(&env);
         blocker.require_auth();
+        Self::require_not_paused(&env);
         let key = StorageKey::Blocks(blocker.clone());
         let mut blocks: Map<Address, ()> = env
             .storage()
@@ -1179,6 +1215,7 @@ impl LinkoraContract {
     pub fn create_post(env: Env, author: Address, content: String) -> u64 {
         Self::bump_instance(&env);
         author.require_auth();
+        Self::require_not_paused(&env);
         validate_content(&content).expect("invalid content");
 
         let id: u64 = env.storage().instance().get(&POST_CT).unwrap_or(0u64) + 1;
@@ -1230,6 +1267,7 @@ impl LinkoraContract {
     pub fn delete_post(env: Env, author: Address, post_id: u64) {
         Self::bump_instance(&env);
         author.require_auth();
+        Self::require_not_paused(&env);
         let key = StorageKey::Post(post_id);
         let post: Post = env.storage().persistent().get(&key).unwrap_or_else(|| {
             panic!("post does not exist: {}", post_id);
@@ -1284,6 +1322,7 @@ impl LinkoraContract {
     pub fn like_post(env: Env, user: Address, post_id: u64) {
         Self::bump_instance(&env);
         user.require_auth();
+        Self::require_not_paused(&env);
 
         let like_key = StorageKey::Like(post_id, user.clone());
         if env.storage().persistent().has(&like_key) {
@@ -1355,8 +1394,13 @@ impl LinkoraContract {
         Self::bump_temp(&env, &cooldown_key);
 
         let fee_bps = Self::get_fee_bps(env.clone());
-        let fee_amount = (amount * fee_bps as i128) / 10_000;
+        let fee_amount =
+            (amount / 10_000) * fee_bps as i128 + (amount % 10_000) * fee_bps as i128 / 10_000;
         let author_amount = amount - fee_amount;
+        post.tip_total += author_amount;
+        env.storage().persistent().set(&key, &post);
+        Self::bump(&env, &key);
+
         let token_client = token::Client::new(&env, &token);
 
         if fee_amount > 0 {
@@ -1368,10 +1412,6 @@ impl LinkoraContract {
             token_client.transfer(&tipper, &treasury, &fee_amount);
         }
         token_client.transfer(&tipper, &post.author, &author_amount);
-
-        post.tip_total += amount;
-        env.storage().persistent().set(&key, &post);
-        Self::bump(&env, &key);
 
         TipEvent {
             tipper,
@@ -1444,14 +1484,15 @@ impl LinkoraContract {
             .expect("pool not found");
         assert!(pool.token == token, "wrong token for pool");
 
+        pool.balance += amount;
+        env.storage().persistent().set(&key, &pool);
+        Self::bump(&env, &key);
+
         token::Client::new(&env, &token).transfer(
             &depositor,
             env.current_contract_address(),
             &amount,
         );
-        pool.balance += amount;
-        env.storage().persistent().set(&key, &pool);
-        Self::bump(&env, &key);
 
         PoolDepositEvent {
             depositor,
@@ -1636,6 +1677,7 @@ impl LinkoraContract {
     pub fn set_fee(env: Env, fee_bps: u32) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         assert!(fee_bps <= 10_000, "invalid fee");
         let old_fee_bps = Self::get_fee_bps(env.clone());
         env.storage().instance().set(&FEE_BPS, &fee_bps);
@@ -1654,6 +1696,7 @@ impl LinkoraContract {
     pub fn set_treasury(env: Env, treasury: Address) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         let old_treasury = Self::get_treasury(env.clone()).expect("treasury not set");
         env.storage().instance().set(&TREASURY, &treasury);
         TreasuryUpdatedEvent {
@@ -1679,6 +1722,7 @@ impl LinkoraContract {
     pub fn set_tip_cooldown_window(env: Env, cooldown_ledgers: u32) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         assert!(cooldown_ledgers > 0, "cooldown must be positive");
         env.storage()
             .instance()
@@ -1750,7 +1794,7 @@ impl LinkoraContract {
         }
 
         let config_key = StorageKey::GovConfig;
-        let _config: GovConfig = env
+        let config: GovConfig = env
             .storage()
             .persistent()
             .get(&config_key)
@@ -1769,6 +1813,7 @@ impl LinkoraContract {
             votes_for: 0,
             votes_against: 0,
             created_ledger: env.ledger().sequence(),
+            time_lock_ledgers: config.time_lock_ledgers,
             status: GovStatus::Active,
         };
 
@@ -1889,7 +1934,7 @@ impl LinkoraContract {
 
         let current_ledger = env.ledger().sequence();
         let vote_end = proposal.created_ledger + config.vote_window_ledgers;
-        let execution_after = vote_end + config.time_lock_ledgers;
+        let execution_after = vote_end + proposal.time_lock_ledgers as u64;
         assert!(current_ledger >= execution_after, "time-lock not expired");
 
         let total_votes = proposal.votes_for + proposal.votes_against;
@@ -1920,6 +1965,7 @@ impl LinkoraContract {
             GovParameter::GovQuorum => {
                 let val = proposal.new_value as u32;
                 assert!(val > 0 && val <= 100, "quorum must be 1-100");
+                assert!(val >= config.quorum_floor, "quorum must be >= quorum_floor");
                 let mut cfg = config.clone();
                 cfg.quorum = val;
                 env.storage().persistent().set(&StorageKey::GovConfig, &cfg);
@@ -2094,6 +2140,7 @@ impl LinkoraContract {
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         env.deployer()
             .update_current_contract_wasm(new_wasm_hash.clone());
         ContractUpgraded { new_wasm_hash }.publish(&env);
@@ -2550,6 +2597,17 @@ impl LinkoraContract {
         admin.require_auth();
     }
 
+    fn require_not_paused(env: &Env) {
+        if env
+            .storage()
+            .instance()
+            .get::<Symbol, bool>(&PAUSED)
+            .unwrap_or(false)
+        {
+            panic!("contract is paused");
+        }
+    }
+
     /// Extend the TTL of a persistent entry after every write and on every
     /// successful read to keep active data alive on-chain.
     fn bump<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
@@ -2584,7 +2642,7 @@ impl LinkoraContract {
         data.push_back(((ledger >> 8) & 0xff) as u8);
         data.push_back((ledger & 0xff) as u8);
 
-        env.crypto().sha256(&data)
+        env.crypto().sha256(&data).into()
     }
 
     fn hash_merkle_pair(env: &Env, left: &BytesN<32>, right: &BytesN<32>) -> BytesN<32> {
@@ -2599,7 +2657,7 @@ impl LinkoraContract {
         let mut data = Bytes::new(env);
         data.append(&left.to_bytes());
         data.append(&right.to_bytes());
-        env.crypto().sha256(&data)
+        env.crypto().sha256(&data).into()
     }
 
     fn bytesn_leq(left: &BytesN<32>, right: &BytesN<32>) -> bool {

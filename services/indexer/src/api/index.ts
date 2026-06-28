@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import { Pool as PgPool } from "pg";
 import { Database } from "../db";
 import { logger } from "../logger";
-import { rateLimitRead, rateLimitWrite, rateLimit } from "../middleware/rateLimit";
+import { rateLimit as apiLimiter, rateLimitWrite } from "../middleware/rateLimit";
 import { requireStellarAuth } from "../middleware/stellarAuth";
 import { createProfilesRouter } from "./routes/profiles";
 import { createPostsRouter } from "./routes/posts";
@@ -10,8 +10,10 @@ import { createFollowsRouter } from "./routes/follows";
 import { createPoolsRouter } from "./routes/pools";
 import { createStateRootRouter } from "./routes/stateRoot";
 import { createNotificationsRouter } from "./routes/notifications";
-import { createFeedRouter } from "./routes/feed";
+import { createGovernanceRouter } from "./routes/governance";
+import { createUsersRouter } from "./routes/users";
 import { isFenced } from "../gossip";
+import { getBackfillState } from "../stream";
 import {
   defaultNotificationService,
   NotificationService,
@@ -19,14 +21,96 @@ import {
 } from "../notifications/service";
 import { PostgresDatabase } from "../postgres-db";
 
+// ── CORS middleware ───────────────────────────────────────────────────────────
+
+function corsMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "*")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const origin = req.headers.origin;
+  if (origin) {
+    if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+
+  next();
+}
+
 // ── App factory ───────────────────────────────────────────────────────────────
 
 export function createApp(db: Database, pg?: PgPool): express.Application {
   const app = express();
   app.use(express.json());
+  app.use(corsMiddleware);
 
-  app.get("/health", (_req: Request, res: Response): void => {
-    res.json({ status: "ok" });
+  const startTime = Date.now();
+  const version = process.env.npm_package_version ?? "0.1.0";
+  const commit = process.env.COMMIT_SHA ?? "unknown";
+
+  // ── Health endpoints ───────────────────────────────────────────────────────
+
+  app.get("/health", async (_req: Request, res: Response): Promise<void> => {
+    const uptime = Math.floor((Date.now() - startTime) / 1000);
+    const backfill = getBackfillState();
+
+    // DB check
+    let dbStatus = "disconnected";
+    try {
+      if (pg) { await pg.query("SELECT 1"); dbStatus = "connected"; }
+    } catch { /* keep disconnected */ }
+
+    // RPC check
+    let rpcStatus = "unreachable";
+    try {
+      const rpcUrl = process.env.STELLAR_RPC_URL;
+      if (rpcUrl) {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 3000);
+        await fetch(`${rpcUrl}`, { method: "POST", signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getLatestLedger", params: [] }),
+        }).finally(() => clearTimeout(t));
+        rpcStatus = "reachable";
+      }
+    } catch { /* keep unreachable */ }
+
+    const ok = dbStatus === "connected" && rpcStatus === "reachable";
+    res.status(ok ? 200 : 503).json({
+      status: ok ? "ok" : "degraded",
+      uptime,
+      version,
+      commit,
+      db: dbStatus,
+      rpc: rpcStatus,
+      backfill: backfill.active ? { active: true, fromLedger: backfill.fromLedger, toLedger: backfill.toLedger } : { active: false },
+    });
+  });
+
+  // Readiness: ready to serve traffic (DB + RPC up)
+  app.get("/health/ready", async (_req: Request, res: Response): Promise<void> => {
+    try {
+      if (pg) await pg.query("SELECT 1");
+      res.json({ status: "ready" });
+    } catch {
+      res.status(503).json({ status: "not ready", reason: "db unavailable" });
+    }
+  });
+
+  // Liveness: process is alive
+  app.get("/health/live", (_req: Request, res: Response): void => {
+    res.json({ status: "live" });
   });
 
   // Apply rate limiting to all /api routes.
@@ -48,6 +132,8 @@ export function createApp(db: Database, pg?: PgPool): express.Application {
   app.use("/api/posts", createPostsRouter(db));
   app.use("/api/follows", createFollowsRouter(db));
   app.use("/api/pools", createPoolsRouter(db));
+  app.use("/api/governance", createGovernanceRouter(db));
+  app.use("/api/users", createUsersRouter(db));
 
   // Feed routes (requires pg pool)
   if (pg) {
@@ -63,82 +149,6 @@ export function createApp(db: Database, pg?: PgPool): express.Application {
   if (pg) {
     app.use("/api/state-root", createStateRootRouter(pg));
   }
-
-  // ── Search endpoint ──────────────────────────────────────────────────────────
-
-  interface SearchQuery {
-    query: string;
-    limit?: number;
-    offset?: number;
-  }
-
-  interface Post {
-    id: number;
-    author: string;
-    content: string;
-    tip_total: string;
-    timestamp: number;
-  }
-
-  interface SearchResponse {
-    posts: Post[];
-    total: number;
-    has_more: boolean;
-  }
-
-  interface ErrorResponse {
-    error: string;
-    code: string;
-  }
-
-  const MAX_LIMIT = 100;
-  const DEFAULT_LIMIT = 20;
-  const DEFAULT_OFFSET = 0;
-
-  // Override: search uses read-rate-limit even though it's POST
-  app.post(
-    "/api/search/posts",
-    rateLimitRead,
-    (req: Request, res: Response<SearchResponse | ErrorResponse>): void => {
-      const body = req.body as Partial<SearchQuery>;
-
-      if (
-        body.query === undefined ||
-        body.query === null ||
-        typeof body.query !== "string" ||
-        body.query.trim() === ""
-      ) {
-        res.status(400).json({ error: "query is required", code: "INVALID_QUERY" });
-        return;
-      }
-
-      const limit = body.limit !== undefined ? Number(body.limit) : DEFAULT_LIMIT;
-      const offset = body.offset !== undefined ? Number(body.offset) : DEFAULT_OFFSET;
-
-      if (!Number.isInteger(limit) || limit < 1) {
-        res.status(400).json({ error: "limit must be a positive integer", code: "INVALID_QUERY" });
-        return;
-      }
-
-      if (limit > MAX_LIMIT) {
-        res.status(400).json({
-          error: `limit cannot exceed ${MAX_LIMIT}`,
-          code: "LIMIT_EXCEEDED",
-        });
-        return;
-      }
-
-      if (!Number.isInteger(offset) || offset < 0) {
-        res
-          .status(400)
-          .json({ error: "offset must be a non-negative integer", code: "INVALID_QUERY" });
-        return;
-      }
-
-      // TODO: integrate with the search database.
-      res.json({ posts: [], total: 0, has_more: false });
-    }
-  );
 
   // ── DM relay endpoint (write — requires Stellar auth + write rate limit) ───
 
@@ -205,5 +215,6 @@ if (require.main === module) {
 
   apiApp.listen(PORT, () => {
     console.log(`Indexer API listening on port ${PORT}`);
+    console.log(`Rate limit enabled: read limit is 60 RPM, write limit is 10 RPM`);
   });
 }
