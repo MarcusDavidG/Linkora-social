@@ -2,6 +2,7 @@
 extern crate alloc;
 
 use super::*;
+use alloc::string::String as StdString;
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, Events, Ledger},
@@ -1344,6 +1345,90 @@ fn test_initialize_stores_contract_state_version() {
         .expect("contract state should be initialized");
     assert_eq!(state.version, 1);
     assert_eq!(state.implementation_wasm_hash, None);
+}
+
+#[test]
+#[should_panic(expected = "username must be at most 50 characters")]
+fn test_set_profile_rejects_oversized_username() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, _) = setup_contract(&env);
+
+    let user = Address::generate(&env);
+    let token = Address::generate(&env);
+    let long_username = StdString::from_iter(core::iter::repeat('a').take(51));
+    client.set_profile(&user, &String::from_str(&env, &long_username), &token);
+}
+
+#[test]
+#[should_panic(expected = "user must not be the zero address")]
+fn test_set_profile_rejects_zero_address() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, _) = setup_contract(&env);
+
+    let zero_user = Address::from_str(
+        &env,
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    );
+    let token = Address::generate(&env);
+
+    client.set_profile(&zero_user, &String::from_str(&env, "alice"), &token);
+}
+
+#[test]
+#[should_panic(expected = "content must be at most 2000 characters")]
+fn test_create_post_rejects_oversized_content() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, _) = setup_contract(&env);
+
+    let author = Address::generate(&env);
+    let long_content = StdString::from_iter(core::iter::repeat('x').take(2001));
+    client.create_post(&author, &String::from_str(&env, &long_content));
+}
+
+#[test]
+#[should_panic(expected = "tip amount must be positive")]
+fn test_tip_rejects_zero_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, _) = setup_contract(&env);
+
+    let author = Address::generate(&env);
+    let tipper = Address::generate(&env);
+    let token = Address::generate(&env);
+    let post_id = client.create_post(&author, &String::from_str(&env, "hello"));
+
+    client.tip(&tipper, &post_id, &token, &0);
+}
+
+#[test]
+#[should_panic(expected = "verdict must be upheld or dismissed")]
+fn test_review_report_rejects_pending_verdict() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let user = Address::generate(&env);
+    let reporter = Address::generate(&env);
+    let token = setup_token(&env, &reporter);
+    client.set_profile(&user, &String::from_str(&env, "alice"), &token);
+    let post_id = client.create_post(&user, &String::from_str(&env, "report me"));
+
+    client.report_post(
+        &reporter,
+        &post_id,
+        &token,
+        &1,
+        &BytesN::from_array(&env, &[1u8; 32]),
+    );
+
+    let mods = symbol_short!("mods");
+    let admins = soroban_sdk::vec![&env, admin.clone()];
+    client.create_pool(&admin, &mods, &token, &admins, &1);
+
+    client.review_report(&admins, &post_id, &reporter, &ReportStatus::Pending);
 }
 
 #[test]
