@@ -4640,3 +4640,38 @@ fn test_get_followers_large_offset_no_panic() {
     let result = client.get_followers(&user_a, &100, &10);
     assert_eq!(result.len(), 0);
 }
+
+// ── Issue #717: verify username of 33 characters is rejected ─────────────────
+
+#[test]
+#[should_panic(expected = "username too long")]
+fn test_717_set_profile_username_33_chars_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, _) = setup_contract(&env);
+
+    let user = Address::generate(&env);
+    let token = Address::generate(&env);
+    // 33-character username must panic with "username too long"
+    let username_str = "abcdefghijklmnopqrstuvwxyz1234567";
+    let username = String::from_str(&env, username_str);
+    assert_eq!(username.len(), 33);
+    client.set_profile(&user, &username, &token);
+}
+
+#[test]
+fn test_717_set_profile_username_32_chars_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, _) = setup_contract(&env);
+
+    let user = Address::generate(&env);
+    let token = Address::generate(&env);
+    // exactly 32-character username must succeed
+    let username_str = "abcdefghijklmnopqrstuvwxyz123456";
+    let username = String::from_str(&env, username_str);
+    assert_eq!(username.len(), 32);
+    client.set_profile(&user, &username, &token);
+    let profile = client.get_profile(&user).unwrap();
+    assert_eq!(profile.username, username);
+}
