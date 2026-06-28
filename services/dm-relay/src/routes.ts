@@ -44,6 +44,22 @@ const wsClients = new Map<string, Set<WebSocket>>();
 export function registerWsClient(address: string, ws: WebSocket): void {
   if (!wsClients.has(address)) wsClients.set(address, new Set());
   wsClients.get(address)!.add(ws);
+  
+  ws.on('message', (data) => {
+    try {
+      const payload = JSON.parse(data.toString());
+      if (payload.type === 'typing_status' && typeof payload.recipient === 'string') {
+        // Force the sender to be the address tied to this websocket connection
+        pushToRecipient(payload.recipient, {
+          type: 'typing_status',
+          sender: address,
+        });
+      }
+    } catch (e) {
+      // Ignore invalid JSON from clients
+    }
+  });
+
   ws.on('close', () => {
     wsClients.get(address)?.delete(ws);
     if (wsClients.get(address)?.size === 0) wsClients.delete(address);
