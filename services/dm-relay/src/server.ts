@@ -22,6 +22,7 @@ import {
   notFoundHandler,
   validateContentType,
 } from './middleware';
+import { logger } from './logger';
 
 // Load environment variables
 dotenv.config();
@@ -62,7 +63,7 @@ async function createApp() {
   app.use(validateContentType);
 
   // Initialize database
-  console.log('Connecting to database...');
+  logger.info({ service: 'dm-relay' }, 'Connecting to database...');
   const database = new Database(config.databaseUrl);
   await database.init();
 
@@ -100,7 +101,7 @@ async function createApp() {
     const address = url.searchParams.get('address') ?? '';
     if (address) {
       registerWsClient(address, ws);
-      console.log(`[ws] Client connected for ${address}`);
+      logger.info({ address }, 'WebSocket client connected');
     } else {
       ws.close(1008, 'Missing address query param');
     }
@@ -108,13 +109,13 @@ async function createApp() {
 
   // Graceful shutdown
   const gracefulShutdown = async (signal: string) => {
-    console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+    logger.info({ signal }, 'Starting graceful shutdown...');
 
     wss.close();
     cleanupService.stop();
     await database.close();
 
-    console.log('Graceful shutdown completed.');
+    logger.info('Graceful shutdown completed');
     process.exit(0);
   };
 
@@ -129,23 +130,12 @@ async function startServer() {
     const { app: httpServer } = await createApp();
 
     const server = httpServer.listen(config.port, () => {
-      console.log(`
-╭─────────────────────────────────────────────────╮
-│  🔐 Linkora DM Relay Service                    │
-│                                                 │
-│  Port:        ${config.port.toString().padEnd(30)} │
-│  Environment: ${config.nodeEnv.padEnd(30)} │
-│  TTL:         ${config.messageTtlDays} days${' '.repeat(24)} │
-│                                                 │
-│  📡 Server running and ready for encrypted     │
-│     message relay (transport-only mode)        │
-╰─────────────────────────────────────────────────╯
-      `);
+      logger.info({ port: config.port, env: config.nodeEnv, ttlDays: config.messageTtlDays }, 'DM Relay service started');
     });
 
     return server;
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error({ err: error }, 'Failed to start server');
     process.exit(1);
   }
 }
