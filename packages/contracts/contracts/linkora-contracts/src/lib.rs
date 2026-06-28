@@ -345,6 +345,14 @@ pub struct PostDeleted {
 
 #[contractevent]
 #[derive(Clone)]
+pub struct ProfileDeletedEvent {
+    #[topic]
+    pub user: Address,
+    pub username: String,
+}
+
+#[contractevent]
+#[derive(Clone)]
 pub struct ProposalCreatedEvent {
     #[topic]
     pub pool_id: Symbol,
@@ -728,6 +736,12 @@ impl LinkoraContract {
             .get(&key)
             .unwrap_or_else(|| panic!("profile does not exist"));
 
+        ProfileDeletedEvent {
+            user: user.clone(),
+            username: profile.username.clone(),
+        }
+        .publish(&env);
+
         env.storage()
             .persistent()
             .remove(&StorageKey::UsernameIndex(profile.username));
@@ -867,6 +881,7 @@ impl LinkoraContract {
     pub fn follow(env: Env, follower: Address, followee: Address) {
         Self::bump_instance(&env);
         follower.require_auth();
+        Self::require_not_paused(&env);
 
         if Self::is_blocked(env.clone(), followee.clone(), follower.clone()) {
             panic!("blocked");
@@ -969,6 +984,7 @@ impl LinkoraContract {
     pub fn unfollow(env: Env, follower: Address, followee: Address) {
         Self::bump_instance(&env);
         follower.require_auth();
+        Self::require_not_paused(&env);
 
         let edge_key = StorageKey::Edge(follower.clone(), followee.clone());
 
@@ -1139,6 +1155,7 @@ impl LinkoraContract {
     pub fn block_user(env: Env, blocker: Address, blocked: Address) {
         Self::bump_instance(&env);
         blocker.require_auth();
+        Self::require_not_paused(&env);
         let key = StorageKey::Blocks(blocker.clone());
         let mut blocks: Map<Address, ()> = env
             .storage()
@@ -1154,6 +1171,7 @@ impl LinkoraContract {
     pub fn unblock_user(env: Env, blocker: Address, blocked: Address) {
         Self::bump_instance(&env);
         blocker.require_auth();
+        Self::require_not_paused(&env);
         let key = StorageKey::Blocks(blocker.clone());
         let mut blocks: Map<Address, ()> = env
             .storage()
@@ -1180,6 +1198,7 @@ impl LinkoraContract {
     pub fn create_post(env: Env, author: Address, content: String) -> u64 {
         Self::bump_instance(&env);
         author.require_auth();
+        Self::require_not_paused(&env);
         validate_content(&content).expect("invalid content");
 
         let id: u64 = env.storage().instance().get(&POST_CT).unwrap_or(0u64) + 1;
@@ -1231,6 +1250,7 @@ impl LinkoraContract {
     pub fn delete_post(env: Env, author: Address, post_id: u64) {
         Self::bump_instance(&env);
         author.require_auth();
+        Self::require_not_paused(&env);
         let key = StorageKey::Post(post_id);
         let post: Post = env.storage().persistent().get(&key).unwrap_or_else(|| {
             panic!("post does not exist: {}", post_id);
@@ -1285,6 +1305,7 @@ impl LinkoraContract {
     pub fn like_post(env: Env, user: Address, post_id: u64) {
         Self::bump_instance(&env);
         user.require_auth();
+        Self::require_not_paused(&env);
 
         let like_key = StorageKey::Like(post_id, user.clone());
         if env.storage().persistent().has(&like_key) {
@@ -1639,6 +1660,7 @@ impl LinkoraContract {
     pub fn set_fee(env: Env, fee_bps: u32) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         assert!(fee_bps <= 10_000, "invalid fee");
         let old_fee_bps = Self::get_fee_bps(env.clone());
         env.storage().instance().set(&FEE_BPS, &fee_bps);
@@ -1657,6 +1679,7 @@ impl LinkoraContract {
     pub fn set_treasury(env: Env, treasury: Address) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         let old_treasury = Self::get_treasury(env.clone()).expect("treasury not set");
         env.storage().instance().set(&TREASURY, &treasury);
         TreasuryUpdatedEvent {
@@ -1682,6 +1705,7 @@ impl LinkoraContract {
     pub fn set_tip_cooldown_window(env: Env, cooldown_ledgers: u32) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         assert!(cooldown_ledgers > 0, "cooldown must be positive");
         env.storage()
             .instance()
@@ -2099,6 +2123,7 @@ impl LinkoraContract {
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         Self::bump_instance(&env);
         Self::require_admin(&env);
+        Self::require_not_paused(&env);
         env.deployer()
             .update_current_contract_wasm(new_wasm_hash.clone());
         ContractUpgraded { new_wasm_hash }.publish(&env);
@@ -2553,6 +2578,17 @@ impl LinkoraContract {
             .get(&ADMIN)
             .expect("not initialized");
         admin.require_auth();
+    }
+
+    fn require_not_paused(env: &Env) {
+        if env
+            .storage()
+            .instance()
+            .get::<Symbol, bool>(&PAUSED)
+            .unwrap_or(false)
+        {
+            panic!("contract is paused");
+        }
     }
 
     /// Extend the TTL of a persistent entry after every write and on every
