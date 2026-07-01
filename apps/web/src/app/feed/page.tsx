@@ -11,6 +11,7 @@ import { FieldError } from "@/components/forms/FieldError";
 import { OnboardingGuard } from "@/components/onboarding/OnboardingGuard";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AnimatedList } from "@/components/AnimatedList";
+import { useFeedPersistence } from "@/hooks/useFeedPersistence";
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /*  Config & Constants                                                       */
@@ -103,6 +104,9 @@ export default function FeedPage() {
   const { address: currentUserAddress, connected, connect } = useWallet();
   const [activeTab, setActiveTab] = useState<"following" | "explore">("explore");
 
+  const { isOffline, servedFromCache, setServedFromCache, restoreScroll, persistFeed, getCache, clearCache } =
+    useFeedPersistence(activeTab);
+
   // Feed items, pagination & loading states
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,13 +146,16 @@ export default function FeedPage() {
 
       setPosts((prev) => (append ? [...prev, ...fetchedPosts] : fetchedPosts));
       setHasMore(data.has_more ?? false);
+
+      const newPosts = append ? [...posts, ...fetchedPosts] : fetchedPosts;
+      persistFeed({ posts: newPosts, cursor: cursorParam, hasMore: data.has_more ?? false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [posts, persistFeed]);
 
   const fetchFollowingFeed = useCallback(
     async (cursorParam: number | null, append = false) => {
@@ -204,8 +211,10 @@ export default function FeedPage() {
         // For following tab, we use client-side pagination with cursor
         const startIdx = append ? posts.length : 0;
         const paginated = allFetchedPosts.slice(startIdx, startIdx + PAGE_SIZE);
+        const newPosts = append ? [...posts, ...paginated] : paginated;
         setPosts((prev) => (append ? [...prev, ...paginated] : paginated));
         setHasMore(startIdx + paginated.length < allFetchedPosts.length);
+        persistFeed({ posts: newPosts, cursor: cursorParam, hasMore: startIdx + paginated.length < allFetchedPosts.length });
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
@@ -213,7 +222,7 @@ export default function FeedPage() {
         setLoadingMore(false);
       }
     },
-    [currentUserAddress, posts] as const
+    [currentUserAddress, posts, persistFeed] as const
   );
 
   const loadFeed = useCallback(
@@ -228,13 +237,34 @@ export default function FeedPage() {
     [activeTab, fetchExploreFeed, fetchFollowingFeed]
   );
 
-  // Initial load and tab switching
+  // Initial load and tab switching — restore from cache when offline or on mount
   useEffect(() => {
     setCursor(null);
     setHasNewPosts(false);
     setFollowsNobody(false);
+
+    const cached = getCache();
+    if (cached && cached.posts.length > 0 && isOffline) {
+      setPosts(cached.posts);
+      setCursor(cached.cursor);
+      setHasMore(cached.hasMore);
+      setLoading(false);
+      setServedFromCache(true);
+      restoreScroll();
+      return;
+    }
+
     loadFeed(null, false);
-  }, [activeTab, loadFeed]);
+  }, [activeTab, loadFeed, isOffline, getCache, setServedFromCache, restoreScroll]);
+
+  // Persist scroll position on scroll
+  useEffect(() => {
+    if (posts.length === 0) return;
+    const persistTimer = setTimeout(() => {
+      persistFeed({ posts, cursor, hasMore });
+    }, 300);
+    return () => clearTimeout(persistTimer);
+  }, [posts, cursor, hasMore, persistFeed]);
 
   // Infinite Scroll Sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -390,6 +420,20 @@ export default function FeedPage() {
   return (
     <OnboardingGuard>
       <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] pb-12">
+        {/* Offline Banner */}
+        {isOffline && (
+          <div className="bg-amber-900/40 border-b border-amber-700/50 text-amber-200 px-4 py-2.5 text-center text-sm font-medium">
+            You are offline. Showing cached feed data.
+          </div>
+        )}
+
+        {/* Served from cache indicator */}
+        {!isOffline && servedFromCache && (
+          <div className="bg-blue-900/30 border-b border-blue-700/40 text-blue-200 px-4 py-2 text-center text-xs">
+            Showing cached feed. Pull to refresh for latest posts.
+          </div>
+        )}
+
         {/* Real-time Toast Banner */}
         {hasNewPosts && (
           <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">

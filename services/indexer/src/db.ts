@@ -68,6 +68,23 @@ export interface Pool {
   updated_ledger: number;
 }
 
+export interface PoolAnalytics {
+  total_deposited: string;
+  total_withdrawn: string;
+  contributor_count: number;
+  recent_events: PoolEvent[];
+  volume_7d: string;
+  volume_30d: string;
+}
+
+export interface PoolEvent {
+  type: "deposit" | "withdraw";
+  address: string;
+  amount: string;
+  ledger: number;
+  timestamp: string;
+}
+
 export interface GovernanceProposal {
   proposal_id: bigint;
   proposer: string;
@@ -124,6 +141,8 @@ export interface Database {
   adjustPoolBalance(pool_id: string, delta: bigint, ledger: number): Promise<void>;
   insertPool(pool: Pool): Promise<void>;
   getPool(pool_id: string): Promise<Pool | null>;
+  listPools(): Promise<Pool[]>;
+  getPoolAnalytics(pool_id: string): Promise<PoolAnalytics>;
   addPoolAdmin(pool_id: string, admin: string, ledger: number): Promise<void>;
   removePoolAdmin(pool_id: string, admin: string, ledger: number): Promise<void>;
 
