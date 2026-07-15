@@ -7,3 +7,22 @@ target/
 .env.*
 !.env.example
 apps/mobile/coverage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.wasm
+*.exe
+*.dll
+*.so
+
+# Generated test snapshots
+test_snapshots/
+
+# Lock file conflicts (pnpm is canonical)
+package-lock.json
+
+# Auto-generated PR descriptions
+.github/PR_BODY_*.md
