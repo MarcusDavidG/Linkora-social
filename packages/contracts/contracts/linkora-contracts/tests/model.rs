@@ -67,6 +67,12 @@ pub struct ContractModel {
     time_lock_ledgers: u32,
 }
 
+impl Default for ContractModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContractModel {
     pub fn new() -> Self {
         Self {
@@ -255,7 +261,7 @@ impl ContractModel {
         proposal_id: u64,
         new_quorum: u32,
     ) -> Result<(), String> {
-        if new_quorum < 1 || new_quorum > 100 {
+        if !(1..=100).contains(&new_quorum) {
             return Err("invalid quorum".to_string());
         }
 
@@ -349,7 +355,7 @@ mod tests {
 
         model.tip("alice".to_string(), 1, 1000).unwrap();
 
-        let fee = (1000 / 10_000) * 1000 + (1000 % 10_000) * 1000 / 10_000;
+        let fee = 1000 * 1000 / 10_000;
         let author_amount = 1000 - fee;
 
         let tip_total = model.get_tip_total(1).unwrap();

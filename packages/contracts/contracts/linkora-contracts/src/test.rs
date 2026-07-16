@@ -1356,7 +1356,7 @@ fn test_set_profile_rejects_oversized_username() {
 
     let user = Address::generate(&env);
     let token = Address::generate(&env);
-    let long_username = StdString::from_iter(core::iter::repeat('a').take(51));
+    let long_username = StdString::from_iter(core::iter::repeat_n('a', 51));
     client.set_profile(&user, &String::from_str(&env, &long_username), &token);
 }
 
@@ -1384,7 +1384,7 @@ fn test_create_post_rejects_oversized_content() {
     let (client, _, _) = setup_contract(&env);
 
     let author = Address::generate(&env);
-    let long_content = StdString::from_iter(core::iter::repeat('x').take(2001));
+    let long_content = StdString::from_iter(core::iter::repeat_n('x', 2001));
     client.create_post(&author, &String::from_str(&env, &long_content));
 }
 
@@ -1612,7 +1612,7 @@ fn test_set_fee_emits_fee_updated_event() {
     env.mock_all_auths();
     let (client, admin, _) = setup_contract(&env);
 
-    let count_before = env.events().all().events().len();
+    let _count_before = env.events().all().events().len();
     client.set_fee(&admin, &250);
     let count_after = env.events().all().events().len();
 
@@ -1631,7 +1631,7 @@ fn test_set_treasury_emits_treasury_updated_event() {
     let (client, admin, old_treasury) = setup_contract(&env);
     let new_treasury = Address::generate(&env);
 
-    let count_before = env.events().all().events().len();
+    let _count_before = env.events().all().events().len();
     client.set_treasury(&admin, &new_treasury);
     let count_after = env.events().all().events().len();
 
@@ -3525,7 +3525,7 @@ fn setup_governance_with_pool(
 fn test_gov_happy_path_propose_vote_execute() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -3595,7 +3595,7 @@ fn test_gov_quorum_decay_proposal_fails_below_floor() {
     let env = Env::default();
     env.mock_all_auths();
     // setup_governance uses: quorum=60, time_lock=100, vote_window=200, decay=50, floor=30
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &100, &None);
@@ -3626,7 +3626,7 @@ fn test_gov_quorum_decay_proposal_fails_below_floor() {
 fn test_gov_quorum_not_met_fails() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &100, &None);
@@ -3696,7 +3696,7 @@ fn test_gov_quorum_decay_allows_passage() {
 fn test_gov_veto_during_timelock() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
+    let (client, _admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -3722,7 +3722,7 @@ fn test_gov_veto_during_timelock() {
 fn test_gov_veto_prevents_execution() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
+    let (client, _admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -3751,7 +3751,7 @@ fn test_gov_veto_prevents_execution() {
 fn test_gov_double_vote_panics() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -3797,7 +3797,7 @@ fn test_publish_dm_key_emits_event() {
     let user = Address::generate(&env);
     let dm_key = BytesN::from_array(&env, &[2u8; 32]);
 
-    let count_before = env.events().all().events().len();
+    let _count_before = env.events().all().events().len();
     client.publish_dm_key(&user, &dm_key);
     let count_after = env.events().all().events().len();
 
@@ -3987,7 +3987,7 @@ fn test_follow_unfollow_refollow_consistency() {
 fn test_gov_execute_before_timelock_fails() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -4008,7 +4008,7 @@ fn test_gov_execute_before_timelock_fails() {
 fn test_gov_vote_after_window_panics() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -4025,7 +4025,7 @@ fn test_gov_vote_after_window_panics() {
 fn test_gov_tip_cooldown_parameter_change() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::TipCooldownWindow, &5000, &None);
@@ -4045,7 +4045,7 @@ fn test_gov_tip_cooldown_parameter_change() {
 fn test_gov_config_init_and_read() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let config = client.gov_get_config();
     assert_eq!(config.quorum, 60);
@@ -4059,7 +4059,7 @@ fn test_gov_config_init_and_read() {
 fn test_gov_proposal_get() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &750, &None);
@@ -4079,7 +4079,7 @@ fn test_gov_proposal_get() {
 fn test_gov_veto_before_vote_window_ends_panics() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
+    let (client, _admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -4097,7 +4097,7 @@ fn test_gov_veto_before_vote_window_ends_panics() {
 fn test_gov_veto_after_timelock_panics() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
+    let (client, _admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -4114,7 +4114,7 @@ fn test_gov_veto_after_timelock_panics() {
 fn test_gov_effective_quorum_at_creation() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);
@@ -4130,7 +4130,7 @@ fn test_gov_effective_quorum_at_creation() {
 fn test_gov_change_gov_quorum_via_governance() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::GovQuorum, &50, &None);
@@ -4152,7 +4152,7 @@ fn test_gov_change_gov_quorum_via_governance() {
 fn test_gov_multiple_proposals() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let proposer = Address::generate(&env);
     let id1 = client.gov_propose(&proposer, &GovParameter::FeeBps, &100, &None);
@@ -4171,7 +4171,7 @@ fn test_gov_multiple_proposals() {
 fn test_gov_treasury_change_via_governance() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_governance(&env);
+    let (client, _admin, _) = setup_governance(&env);
 
     let new_treasury = Address::generate(&env);
     let proposer = Address::generate(&env);
@@ -4198,7 +4198,7 @@ fn test_gov_treasury_change_via_governance() {
 fn test_gov_veto_insufficient_pool_signers_panics() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
+    let (client, _admin, _, pool_id, pool_admins) = setup_governance_with_pool(&env);
 
     let proposer = Address::generate(&env);
     let proposal_id = client.gov_propose(&proposer, &GovParameter::FeeBps, &500, &None);

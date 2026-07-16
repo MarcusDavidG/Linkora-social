@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use soroban_sdk::Env;
-
 /// Invariant harness: Contract state invariants that must always hold.
 ///
 /// This module defines invariants that the contract should maintain across
@@ -14,10 +12,9 @@ use soroban_sdk::Env;
 /// 3. Balance Consistency: Tracked balances match token contract state
 /// 4. Governance Soundness: Proposals use snapshotted config at creation time
 /// 5. Tip Accounting: post.tip_total = sum of author amounts (not full tips)
-
+///
 #[cfg(test)]
 mod invariants {
-    use super::*;
 
     /// **Invariant 1:** Social graph adjacency is logically consistent.
     /// After following/unfollowing operations, the adjacency relationships
