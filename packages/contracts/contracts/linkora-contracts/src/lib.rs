@@ -1,4 +1,6 @@
 #![no_std]
+extern crate alloc;
+use alloc::format;
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, symbol_short, token,
     Address, Bytes, BytesN, Env, Map, String, Symbol, Vec,
@@ -12,7 +14,7 @@ mod validation;
 use validation::{
     validate_address_list, validate_amount, validate_content, validate_gov_parameter,
     validate_non_default_address, validate_protocol_fee, validate_report_verdict,
-    validate_u32_range, validate_username,
+    validate_u32_range, validate_username, MAX_FEE_BPS, MAX_QUORUM,
 };
 
 // ── Storage Key Enum ──────────────────────────────────────────────────────────
@@ -1354,7 +1356,6 @@ impl LinkoraContract {
         validate_non_default_address(&env, "author", &author);
         validate_content(&env, &content);
         Self::require_not_paused(&env);
-        validate_content(&content).expect("invalid content");
 
         let id: u64 = env.storage().instance().get(&POST_CT).unwrap_or(0u64) + 1;
         let key = StorageKey::Post(id);
@@ -2148,8 +2149,11 @@ impl LinkoraContract {
 
         let current_ledger = env.ledger().sequence();
         let vote_end = proposal.created_ledger + config.vote_window_ledgers;
-        let execution_after = vote_end + proposal.time_lock_ledgers as u64;
-        assert!(current_ledger >= execution_after, "time-lock not expired");
+        let execution_after = vote_end as u64 + proposal.time_lock_ledgers as u64;
+        assert!(
+            (current_ledger as u64) >= execution_after,
+            "time-lock not expired"
+        );
 
         let total_votes = proposal.votes_for + proposal.votes_against;
         assert!(total_votes > 0, "no votes cast");
@@ -2358,13 +2362,13 @@ impl LinkoraContract {
 
     pub fn upgrade(env: Env, upgrader: Address, new_wasm_hash: BytesN<32>) {
         Self::bump_instance(&env);
-        let mut state = Self::get_contract_state(&env);
+        let mut state: ContractState = env.storage().instance().get(&CONTRACT_STATE).unwrap();
         upgrader.require_auth();
         validate_non_default_address(&env, "upgrader", &upgrader);
         Self::require_role(&env, &upgrader, Role::Upgrader);
         require_with_error!(
             &env,
-            new_wasm_hash != BytesN::default(),
+            new_wasm_hash != BytesN::from_array(&env, &[0u8; 32]),
             "wasm hash must not be empty"
         );
         state.version = state

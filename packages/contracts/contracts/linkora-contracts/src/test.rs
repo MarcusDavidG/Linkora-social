@@ -1339,9 +1339,9 @@ fn test_initialize_stores_contract_state_version() {
     client.initialize(&admin, &treasury, &0);
 
     let state: ContractState = env
-        .storage()
-        .instance()
-        .get(&CONTRACT_STATE)
+        .as_contract(&client.address, || {
+            env.storage().instance().get(&CONTRACT_STATE)
+        })
         .expect("contract state should be initialized");
     assert_eq!(state.version, 1);
     assert_eq!(state.implementation_wasm_hash, None);
@@ -1482,9 +1482,9 @@ fn test_upgrade_by_admin_succeeds() {
     client.upgrade(&admin, &wasm_hash);
 
     let state: ContractState = env
-        .storage()
-        .instance()
-        .get(&CONTRACT_STATE)
+        .as_contract(&client.address, || {
+            env.storage().instance().get(&CONTRACT_STATE)
+        })
         .expect("contract state should exist after upgrade");
     assert_eq!(state.version, 2);
     assert_eq!(state.implementation_wasm_hash, Some(wasm_hash));
@@ -1554,9 +1554,9 @@ fn test_granted_upgrader_can_upgrade() {
     client.upgrade(&upgrader, &wasm_hash);
 
     let state: ContractState = env
-        .storage()
-        .instance()
-        .get(&CONTRACT_STATE)
+        .as_contract(&client.address, || {
+            env.storage().instance().get(&CONTRACT_STATE)
+        })
         .expect("contract state should exist after upgrade");
     assert_eq!(state.implementation_wasm_hash, Some(wasm_hash));
 }
@@ -3041,7 +3041,7 @@ fn test_profile_write_extends_ttl() {
 fn test_instance_storage_ttl_extended_after_mutation() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _, _) = setup_contract(&env);
+    let (client, admin, _) = setup_contract(&env);
 
     // Mutating call should succeed and extend instance storage TTL.
     client.set_fee(&admin, &250);
@@ -3859,7 +3859,7 @@ fn test_migrate_follow_graph_chunk_safe() {
     // Migration can be split across multiple calls.
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _, _) = setup_contract(&env);
+    let (client, admin, _) = setup_contract(&env);
 
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+use alloc::format;
 use soroban_sdk::{Address, Env, String, Vec};
 
 use crate::{GovParameter, ReportStatus};

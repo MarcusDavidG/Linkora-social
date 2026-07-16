@@ -1,6 +1,6 @@
 import React from "react";
 import renderer from "react-test-renderer";
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 import { PostCard, Post } from "./PostCard";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";

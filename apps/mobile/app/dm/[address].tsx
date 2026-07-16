@@ -80,10 +80,10 @@ export default function DirectMessageScreen() {
                     showToast({ kind: "success", title: "Encryption keys generated successfully" });
                     setDmService(service);
                     service.connectRealTime();
-                    service.onRealTimeEvent((payload: any) => {
-                      if (payload.type === 'new_message' && payload.sender === address) {
+                    service.onRealTimeEvent((payload: Record<string, unknown>) => {
+                      if (payload.type === "new_message" && payload.sender === address) {
                         loadMessagesForService(service);
-                      } else if (payload.type === 'typing_status' && payload.sender === address) {
+                      } else if (payload.type === "typing_status" && payload.sender === address) {
                         setIsTyping(true);
                         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
                         typingTimeoutRef.current = setTimeout(() => {
@@ -103,10 +103,10 @@ export default function DirectMessageScreen() {
 
         setDmService(service);
         service.connectRealTime();
-        service.onRealTimeEvent((payload: any) => {
-          if (payload.type === 'new_message' && payload.sender === address) {
+        service.onRealTimeEvent((payload: Record<string, unknown>) => {
+          if (payload.type === "new_message" && payload.sender === address) {
             loadMessagesForService(service);
-          } else if (payload.type === 'typing_status' && payload.sender === address) {
+          } else if (payload.type === "typing_status" && payload.sender === address) {
             setIsTyping(true);
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             typingTimeoutRef.current = setTimeout(() => {
@@ -145,7 +145,7 @@ export default function DirectMessageScreen() {
   const handleTextChange = (text: string) => {
     setNewMessage(text);
     if (!dmService || !address) return;
-    
+
     const now = Date.now();
     if (now - lastTypingSentRef.current > 3000) {
       dmService.sendTypingStatus(address);

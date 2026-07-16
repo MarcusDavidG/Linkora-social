@@ -174,11 +174,18 @@ impl ContractModel {
             return Err("amount must be positive".to_string());
         }
 
-        let post = self.posts.get_mut(&post_id).ok_or("post not found")?;
+        let author = self
+            .posts
+            .get(&post_id)
+            .ok_or("post not found")?
+            .author
+            .clone();
 
-        if self.is_blocked(&tipper, &post.author) {
+        if self.is_blocked(&tipper, &author) {
             return Err("blocked".to_string());
         }
+
+        let post = self.posts.get_mut(&post_id).ok_or("post not found")?;
 
         // Calculate fee using safe arithmetic
         let fee_amount = (amount / 10_000) * self.fee_bps as i128
@@ -190,12 +197,18 @@ impl ContractModel {
     }
 
     pub fn like(&mut self, liker: String, post_id: u64) -> Result<(), String> {
-        let post = self.posts.get_mut(&post_id).ok_or("post not found")?;
+        let author = self
+            .posts
+            .get(&post_id)
+            .ok_or("post not found")?
+            .author
+            .clone();
 
-        if self.is_blocked(&liker, &post.author) {
+        if self.is_blocked(&liker, &author) {
             return Err("blocked".to_string());
         }
 
+        let post = self.posts.get_mut(&post_id).ok_or("post not found")?;
         post.likes += 1;
         Ok(())
     }
@@ -213,7 +226,7 @@ impl ContractModel {
         }
 
         self.pools.insert(
-            pool_id,
+            pool_id.clone(),
             ModelPool {
                 id: pool_id,
                 balance: initial_balance,
