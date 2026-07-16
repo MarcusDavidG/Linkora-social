@@ -40,8 +40,7 @@ jobs:
           workspaces: packages/contracts
 
       - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq \
-          libdbus-1-dev pkg-config libudev-dev libhidapi-dev
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libdbus-1-dev pkg-config libudev-dev libhidapi-dev
 
       - name: Install stellar-cli
         run: cargo install --locked stellar-cli
