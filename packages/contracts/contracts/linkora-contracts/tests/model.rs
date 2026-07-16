@@ -89,7 +89,7 @@ impl ContractModel {
             return Err("cannot follow self".to_string());
         }
 
-        if self.is_blocked(&follower, &followee) {
+        if self.is_blocked(&followee, &follower) {
             return Err("blocked".to_string());
         }
 
@@ -181,7 +181,7 @@ impl ContractModel {
             .author
             .clone();
 
-        if self.is_blocked(&tipper, &author) {
+        if self.is_blocked(&author, &tipper) {
             return Err("blocked".to_string());
         }
 
@@ -204,7 +204,7 @@ impl ContractModel {
             .author
             .clone();
 
-        if self.is_blocked(&liker, &author) {
+        if self.is_blocked(&author, &liker) {
             return Err("blocked".to_string());
         }
 

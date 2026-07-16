@@ -2,7 +2,7 @@
   "extends": ["../../.eslintrc.base.json"],
   "parserOptions": {
     "project": "./tsconfig.json",
-    "tsconfigRootDir": "services/dm-relay"
+    "tsconfigRootDir": "."
   },
   "rules": {
     "@typescript-eslint/no-explicit-any": "warn",
