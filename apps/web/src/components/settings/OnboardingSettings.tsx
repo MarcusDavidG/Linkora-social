@@ -8,15 +8,19 @@ import { useGuidedTour } from "@/hooks/useGuidedTour";
 export function OnboardingSettings() {
   const router = useRouter();
   const { state, resetOnboarding } = useOnboarding();
-  const { resetTour } = useGuidedTour();
+  const guidedTourContext = useGuidedTour();
 
   const handleRestartFeatureTour = () => {
-    resetTour();
+    guidedTourContext?.resetTour();
     router.push("/feed");
   };
 
   const handleRestartOnboarding = () => {
-    if (confirm("Are you sure you want to restart the onboarding wizard? This will reset your onboarding progress.")) {
+    if (
+      confirm(
+        "Are you sure you want to restart the onboarding wizard? This will reset your onboarding progress."
+      )
+    ) {
       resetOnboarding();
       router.push("/onboarding");
     }
@@ -105,7 +109,8 @@ export function OnboardingSettings() {
         {/* Info */}
         <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
           <p className="text-sm text-blue-900 dark:text-blue-200">
-            💡 The onboarding wizard helps you set up your profile, follow creators, and configure notifications. You can revisit it anytime from settings.
+            💡 The onboarding wizard helps you set up your profile, follow creators, and configure
+            notifications. You can revisit it anytime from settings.
           </p>
         </div>
       </div>

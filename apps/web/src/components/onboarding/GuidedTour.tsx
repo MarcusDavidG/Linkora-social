@@ -9,17 +9,14 @@ function getTooltipPosition(rect: DOMRect) {
   const padding = 16;
   const tooltipWidth = 320;
   const top = Math.min(rect.bottom + padding, window.innerHeight - 200);
-  const left = Math.min(
-    Math.max(padding, rect.left),
-    window.innerWidth - tooltipWidth - padding
-  );
+  const left = Math.min(Math.max(padding, rect.left), window.innerWidth - tooltipWidth - padding);
 
   return { top, left };
 }
 
 export function GuidedTour() {
   const pathname = usePathname();
-  const { active, stepIndex, currentStep, next, prev, dismiss, totalSteps } = useGuidedTour();
+  const context = useGuidedTour();
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
   const isFeedPage = pathname === "/feed" || pathname === "/";
@@ -29,18 +26,18 @@ export function GuidedTour() {
   }, []);
 
   const updateRect = useCallback(() => {
-    if (!currentStep) return;
-    const element = document.querySelector(currentStep.target);
+    if (!context?.currentStep) return;
+    const element = document.querySelector(context.currentStep.target);
     if (element instanceof HTMLElement) {
       element.scrollIntoView({ block: "nearest", behavior: "smooth" });
       setRect(element.getBoundingClientRect());
       return;
     }
     setRect(null);
-  }, [currentStep]);
+  }, [context]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!context?.active) return;
 
     const frame = window.requestAnimationFrame(updateRect);
     window.addEventListener("resize", updateRect);
@@ -51,11 +48,11 @@ export function GuidedTour() {
       window.removeEventListener("resize", updateRect);
       window.removeEventListener("scroll", updateRect, true);
     };
-  }, [active, stepIndex, updateRect]);
+  }, [context?.active, context?.stepIndex, updateRect]);
 
-  if (!mounted || !active || !currentStep || !isFeedPage) return null;
+  if (!context || !mounted || !context.active || !context.currentStep || !isFeedPage) return null;
 
-  const isLast = stepIndex === totalSteps - 1;
+  const isLast = context.stepIndex === context.totalSteps - 1;
   const tooltipPosition = rect ? getTooltipPosition(rect) : { top: "50%", left: "50%" };
 
   return createPortal(
@@ -110,27 +107,27 @@ export function GuidedTour() {
         }
       >
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-400">
-          Step {stepIndex + 1} of {totalSteps}
+          Step {context.stepIndex + 1} of {context.totalSteps}
         </p>
         <h2 id="guided-tour-title" className="mb-2 text-lg font-bold text-[var(--foreground)]">
-          {currentStep.title}
+          {context.currentStep.title}
         </h2>
         <p id="guided-tour-description" className="mb-4 text-sm text-[var(--text-muted)]">
-          {currentStep.description}
+          {context.currentStep.description}
         </p>
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={dismiss}
+            onClick={context.dismiss}
             className="text-sm font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--foreground)]"
           >
             Skip tour
           </button>
           <div className="flex items-center gap-2">
-            {stepIndex > 0 && (
+            {context.stepIndex > 0 && (
               <button
                 type="button"
-                onClick={prev}
+                onClick={context.prev}
                 className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:border-violet-500/50"
               >
                 Back
@@ -138,7 +135,7 @@ export function GuidedTour() {
             )}
             <button
               type="button"
-              onClick={next}
+              onClick={context.next}
               className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
             >
               {isLast ? "Got it" : "Next"}

@@ -123,9 +123,5 @@ export function GuidedTourProvider({ children }: { children: React.ReactNode }) 
 }
 
 export function useGuidedTour() {
-  const context = useContext(GuidedTourContext);
-  if (!context) {
-    throw new Error("useGuidedTour must be used within GuidedTourProvider");
-  }
-  return context;
+  return useContext(GuidedTourContext);
 }
