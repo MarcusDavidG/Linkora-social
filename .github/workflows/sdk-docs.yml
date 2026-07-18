@@ -37,7 +37,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate SDK docs
-        run: pnpm --filter sdk docs
+        run: pnpm --filter linkora-sdk docs
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
