@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { Database } from "../../db";
 import { validateQuery } from "../../middleware/validate";
 import { offsetPaginationSchema } from "@linkora/types/src/schemas";
+import { internalError } from "@linkora/types/src/errors";
 
 export function createGovernanceRouter(db: Database): Router {
   const router = Router();
@@ -34,7 +35,8 @@ export function createGovernanceRouter(db: Database): Router {
           has_more: offset + proposals.length < total,
         });
       } catch (error) {
-        res.status(500).json({ error: "Failed to list proposals", code: "DATABASE_ERROR" });
+        const err = internalError("Failed to list proposals");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
       }
     }
   );

@@ -117,8 +117,10 @@ describe("users API", () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
-        error: "DM key not found",
-        code: "NOT_FOUND",
+        error: {
+          code: "NOT_FOUND",
+          message: "DM key not found",
+        },
       });
     });
 

@@ -3,6 +3,7 @@ import { Database } from "../../db";
 import { validateParams, validateQuery } from "../../middleware/validate";
 import { z } from "zod";
 import { stellarAddressSchema, offsetPaginationSchema } from "@linkora/types/src/schemas";
+import { notFoundError } from "@linkora/types/src/errors";
 
 const addressParamsSchema = z.object({
   address: stellarAddressSchema,
@@ -40,7 +41,8 @@ export function createUsersRouter(db: Database): Router {
 
       const pubkey = await db.getDmKey(address);
       if (!pubkey) {
-        res.status(404).json({ error: "DM key not found", code: "NOT_FOUND" });
+        const err = notFoundError("DM key not found");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
 

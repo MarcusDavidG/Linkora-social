@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { z, ZodError } from "zod";
+import { validationError } from "@linkora/types/src/errors";
 
 type ValidationTarget = "body" | "query" | "params";
 
@@ -14,13 +15,12 @@ export function validate(schema: z.ZodType, target: ValidationTarget) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req[target]);
     if (!result.success) {
-      res.status(400).json({
-        error: "Validation Error",
-        code: "VALIDATION_ERROR",
-        details: formatZodError(result.error),
-      });
+      const err = validationError("Invalid request data", formatZodError(result.error));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      res.status(err.statusCode).json(err.toJSON((req as any).requestId));
       return;
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (req as any)[target] = result.data;
     next();
   };

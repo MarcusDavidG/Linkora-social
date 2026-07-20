@@ -4,6 +4,7 @@ import { requireStellarAuth } from "../../middleware/stellarAuth";
 import { validateBody } from "../../middleware/validate";
 import { z } from "zod";
 import { stellarAddressSchema } from "@linkora/types/src/schemas";
+import { unauthorizedError, internalError } from "@linkora/types/src/errors";
 
 const PLATFORMS = ["ios", "android", "web"] as const;
 
@@ -71,7 +72,8 @@ export function createNotificationsRouter(service: NotificationService): Router 
     async (req: Request, res: Response): Promise<void> => {
       const address = req.context?.stellarAddress;
       if (!address) {
-        res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+        const err = unauthorizedError("Unauthorized");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
 
@@ -79,7 +81,8 @@ export function createNotificationsRouter(service: NotificationService): Router 
         const prefs = await service.getPreferences(address);
         res.json(prefs || { ...DEFAULT_PREFERENCES, address });
       } catch (error) {
-        res.status(500).json({ error: "Failed to fetch preferences", code: "INTERNAL_ERROR" });
+        const err = internalError("Failed to fetch preferences");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
       }
     }
   );
@@ -91,7 +94,8 @@ export function createNotificationsRouter(service: NotificationService): Router 
     async (req: Request, res: Response): Promise<void> => {
       const address = req.context?.stellarAddress;
       if (!address) {
-        res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
+        const err = unauthorizedError("Unauthorized");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
 
@@ -110,7 +114,8 @@ export function createNotificationsRouter(service: NotificationService): Router 
 
         res.status(200).json({ success: true });
       } catch (error) {
-        res.status(500).json({ error: "Failed to save preferences", code: "INTERNAL_ERROR" });
+        const err = internalError("Failed to save preferences");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
       }
     }
   );

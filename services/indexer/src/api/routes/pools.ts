@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { Database } from "../../db";
 import { validateParams } from "../../middleware/validate";
 import { z } from "zod";
+import { notFoundError, internalError } from "@linkora/types/src/errors";
 
 const poolIdParamsSchema = z.object({
   id: z.string().min(1).refine((v) => v.trim().length > 0, "id is required"),
@@ -17,7 +18,8 @@ export function createPoolsRouter(db: Database): Router {
         pools: pools.map((p) => ({ ...p, balance: p.balance.toString() })),
       });
     } catch {
-      res.status(500).json({ error: "Failed to fetch pools", code: "INTERNAL_ERROR" });
+      const err = internalError("Failed to fetch pools");
+      res.status(err.statusCode).json(err.toJSON(_req.context?.requestId));
     }
   });
 
@@ -29,7 +31,8 @@ export function createPoolsRouter(db: Database): Router {
 
       const pool = await db.getPool(id);
       if (!pool) {
-        res.status(404).json({ error: "Pool not found", code: "NOT_FOUND" });
+        const err = notFoundError("Pool not found");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
 
@@ -49,7 +52,8 @@ export function createPoolsRouter(db: Database): Router {
       try {
         const pool = await db.getPool(id);
         if (!pool) {
-          res.status(404).json({ error: "Pool not found", code: "NOT_FOUND" });
+          const err = notFoundError("Pool not found");
+          res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
           return;
         }
 
@@ -64,7 +68,8 @@ export function createPoolsRouter(db: Database): Router {
           ...analytics,
         });
       } catch {
-        res.status(500).json({ error: "Failed to fetch analytics", code: "INTERNAL_ERROR" });
+        const err = internalError("Failed to fetch analytics");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
       }
     }
   );

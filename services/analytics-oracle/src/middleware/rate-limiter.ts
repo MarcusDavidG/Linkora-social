@@ -93,9 +93,11 @@ export function rateLimiter(req: Request, res: Response, next: NextFunction): vo
   );
 
   res.status(429).set("Retry-After", String(retryAfterSeconds)).json({
-    error: "Too many requests. Please retry after the indicated delay.",
-    code: "RATE_LIMIT_EXCEEDED",
-    retryAfterSeconds,
+    error: {
+      code: "RATE_LIMITED",
+      message: "Too many requests",
+      details: { retryAfterSeconds },
+    },
   });
 }
 
