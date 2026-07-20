@@ -620,7 +620,7 @@ mod tests {
     #[test]
     fn test_model_tip_blocked_by_bidirectional_check() {
         let mut model = ContractModel::new();
-        model.create_post("alice".to_string(), 1).unwrap();
+        model.create_post("bob".to_string(), 1).unwrap();
 
         // B blocks A
         model.block("bob".to_string(), "alice".to_string()).unwrap();
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn test_model_like_blocked_by_bidirectional_check() {
         let mut model = ContractModel::new();
-        model.create_post("alice".to_string(), 1).unwrap();
+        model.create_post("bob".to_string(), 1).unwrap();
 
         // B blocks A
         model.block("bob".to_string(), "alice".to_string()).unwrap();
