@@ -1502,6 +1502,7 @@ fn test_initialize_twice_preserves_state() {
 fn test_upgrade_by_admin_succeeds() {
     let env = Env::default();
     env.mock_all_auths();
+    env.cost_estimate().budget().reset_unlimited();
     let (client, admin, _) = setup_contract(&env);
     let wasm_hash = upload_upgrade_wasm(&env);
 
@@ -1546,6 +1547,7 @@ fn test_upgrade_before_initialize_panics() {
 fn test_upgrade_emits_contract_upgraded_event() {
     let env = Env::default();
     env.mock_all_auths();
+    env.cost_estimate().budget().reset_unlimited();
     let (client, admin, _) = setup_contract(&env);
     let wasm_hash = upload_upgrade_wasm(&env);
     let events_before = env.events().all().events().len();
@@ -1572,6 +1574,7 @@ fn test_admin_can_grant_and_revoke_roles() {
 fn test_granted_upgrader_can_upgrade() {
     let env = Env::default();
     env.mock_all_auths();
+    env.cost_estimate().budget().reset_unlimited();
     let (client, admin, _) = setup_contract(&env);
     let upgrader = Address::generate(&env);
     let wasm_hash = upload_upgrade_wasm(&env);
