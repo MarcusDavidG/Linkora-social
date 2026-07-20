@@ -1010,6 +1010,12 @@ impl LinkoraContract {
         if Self::is_blocked(env.clone(), followee.clone(), follower.clone()) {
             panic!("blocked");
         }
+        if Self::is_blocked(env.clone(), follower.clone(), followee.clone()) {
+            panic!("blocked");
+        }
+        if Self::is_blocked(env.clone(), follower.clone(), followee.clone()) {
+            panic!("blocked");
+        }
 
         // Consistency guards
         let check_expired = |k: &StorageKey| {
@@ -1311,6 +1317,13 @@ impl LinkoraContract {
         blocks.set(blocked.clone(), ());
         env.storage().persistent().set(&key, &blocks);
         Self::bump(&env, &key);
+
+        // Clean up follow relationships between blocker and blocked
+        Self::cleanup_follow_on_block(&env, &blocker, &blocked);
+
+        // Clean up like entries between blocker and blocked
+        Self::cleanup_likes_on_block(&env, &blocker, &blocked);
+
         BlockEvent { blocker, blocked }.publish(&env);
     }
 
@@ -1475,11 +1488,20 @@ impl LinkoraContract {
         }
 
         let post_key = StorageKey::Post(post_id);
-        let mut post: Post = env
+        let post: Post = env
             .storage()
             .persistent()
             .get(&post_key)
             .expect("post not found");
+
+        if Self::is_blocked(env.clone(), post.author.clone(), user.clone()) {
+            panic!("blocked");
+        }
+        if Self::is_blocked(env.clone(), user.clone(), post.author.clone()) {
+            panic!("blocked");
+        }
+
+        let mut post = post;
         post.like_count += 1;
         env.storage().persistent().set(&post_key, &post);
         Self::bump(&env, &post_key);
@@ -1518,6 +1540,12 @@ impl LinkoraContract {
         });
 
         if Self::is_blocked(env.clone(), post.author.clone(), tipper.clone()) {
+            panic!("blocked");
+        }
+        if Self::is_blocked(env.clone(), tipper.clone(), post.author.clone()) {
+            panic!("blocked");
+        }
+        if Self::is_blocked(env.clone(), tipper.clone(), post.author.clone()) {
             panic!("blocked");
         }
 
@@ -2937,6 +2965,73 @@ impl LinkoraContract {
         env.storage()
             .instance()
             .extend_ttl(LEDGER_THRESHOLD, LEDGER_BUMP);
+    }
+
+    // ── Block cleanup helpers ──────────────────────────────────────────────
+
+    /// Remove follow relationships in both directions between two users.
+    /// Called by block_user to enforce a clean break.
+    fn cleanup_follow_on_block(env: &Env, user_a: &Address, user_b: &Address) {
+        // Remove a -> b follow if it exists
+        let edge_key_ab = StorageKey::Edge(user_a.clone(), user_b.clone());
+        if env.storage().persistent().has(&edge_key_ab) {
+            env.storage().persistent().remove(&edge_key_ab);
+            Self::swap_remove_from_index(env, user_a, user_b, true);
+            Self::swap_remove_from_index(env, user_b, user_a, false);
+        }
+
+        // Remove b -> a follow if it exists
+        let edge_key_ba = StorageKey::Edge(user_b.clone(), user_a.clone());
+        if env.storage().persistent().has(&edge_key_ba) {
+            env.storage().persistent().remove(&edge_key_ba);
+            Self::swap_remove_from_index(env, user_b, user_a, true);
+            Self::swap_remove_from_index(env, user_a, user_b, false);
+        }
+    }
+
+    /// Remove like entries on posts authored by either party, liked by the other.
+    /// Called by block_user to enforce a clean break.
+    /// Iterates over the post count and checks likes for the affected pair.
+    fn cleanup_likes_on_block(env: &Env, user_a: &Address, user_b: &Address) {
+        let post_count: u64 = env.storage().instance().get(&POST_CT).unwrap_or(0);
+        if post_count == 0 {
+            return;
+        }
+
+        // Check all post IDs for likes between user_a and user_b
+        for post_id in 1..=post_count {
+            // Remove user_a's like on user_b's posts
+            let like_key_a = StorageKey::Like(post_id, user_a.clone());
+            if env.storage().persistent().has(&like_key_a) {
+                let post_key = StorageKey::Post(post_id);
+                if let Some(mut post) = env.storage().persistent().get::<_, Post>(&post_key) {
+                    if post.author == *user_b {
+                        env.storage().persistent().remove(&like_key_a);
+                        if post.like_count > 0 {
+                            post.like_count -= 1;
+                        }
+                        env.storage().persistent().set(&post_key, &post);
+                        Self::bump(env, &post_key);
+                    }
+                }
+            }
+
+            // Remove user_b's like on user_a's posts
+            let like_key_b = StorageKey::Like(post_id, user_b.clone());
+            if env.storage().persistent().has(&like_key_b) {
+                let post_key = StorageKey::Post(post_id);
+                if let Some(mut post) = env.storage().persistent().get::<_, Post>(&post_key) {
+                    if post.author == *user_a {
+                        env.storage().persistent().remove(&like_key_b);
+                        if post.like_count > 0 {
+                            post.like_count -= 1;
+                        }
+                        env.storage().persistent().set(&post_key, &post);
+                        Self::bump(env, &post_key);
+                    }
+                }
+            }
+        }
     }
 
     // ── Adjacency-set helpers (ADR-001) ───────────────────────────────────
