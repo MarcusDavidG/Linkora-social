@@ -24,6 +24,8 @@ import { AnalyticsReport, SignedAttestation } from "./types.js";
 import { logger } from "./logger.js";
 import { rateLimiter } from "./middleware/rate-limiter.js";
 import { createHealthRouter } from "./routes/health.js";
+import { validateParams } from "./middleware/validate.js";
+import { z } from "zod";
 
 // Wire sha512 for @noble/ed25519 synchronous API
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
@@ -177,12 +179,20 @@ app.use(
 // services/analytics-oracle/src/middleware/rate-limiter.ts and config.ts.
 app.use(rateLimiter);
 
+const creatorParamsSchema = z.object({
+  creator: z.string().regex(/^G[A-Z2-7]{55}$/, "Invalid Stellar address format"),
+});
+
 /**
  * GET /attestations/:creator
  * Returns the latest signed attestation for a creator address.
  */
-app.get("/attestations/:creator", (req, res) => {
-  const att = attestationCache.get(req.params["creator"] ?? "");
+app.get(
+  "/attestations/:creator",
+  validateParams(creatorParamsSchema),
+  (req, res) => {
+  const { creator } = req.params;
+  const att = attestationCache.get(creator);
   if (!att) {
     res.status(404).json({ error: "no attestation found for this creator" });
     return;

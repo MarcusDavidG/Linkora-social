@@ -4,6 +4,8 @@ import { Database } from "../db";
 import { logger } from "../logger";
 import { rateLimit, rateLimitWrite } from "../middleware/rateLimit";
 import { requireStellarAuth } from "../middleware/stellarAuth";
+import { validateBody } from "../middleware/validate";
+import { z } from "zod";
 import { createProfilesRouter } from "./routes/profiles";
 import { createPostsRouter } from "./routes/posts";
 import { createFollowsRouter } from "./routes/follows";
@@ -155,33 +157,24 @@ export function createApp(
 
   // ── DM relay endpoint (write — requires Stellar auth + write rate limit) ───
 
-  interface MessagePayload {
-    recipientAddress: string;
-    encryptedContent: string;
-  }
+  const dmMessageSchema = z.object({
+    recipientAddress: z.string().min(1, "recipientAddress is required"),
+    encryptedContent: z.string().min(1, "encryptedContent is required"),
+  });
 
   app.post(
     "/api/messages",
     requireStellarAuth,
     rateLimitWrite,
+    validateBody(dmMessageSchema),
     (req: Request, res: Response): void => {
-      const body = req.body as Partial<MessagePayload>;
-
-      if (typeof body.recipientAddress !== "string" || body.recipientAddress.trim() === "") {
-        res.status(400).json({ error: "recipientAddress is required", code: "INVALID_PAYLOAD" });
-        return;
-      }
-
-      if (typeof body.encryptedContent !== "string" || body.encryptedContent.trim() === "") {
-        res.status(400).json({ error: "encryptedContent is required", code: "INVALID_PAYLOAD" });
-        return;
-      }
+      const { recipientAddress } = req.body as z.infer<typeof dmMessageSchema>;
 
       // TODO: persist and relay DM via Stellar contract.
       res.status(202).json({
         status: "accepted",
         from: req.context?.stellarAddress,
-        to: body.recipientAddress,
+        to: recipientAddress,
       });
     }
   );

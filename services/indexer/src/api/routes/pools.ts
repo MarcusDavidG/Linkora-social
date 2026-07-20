@@ -1,13 +1,15 @@
 import { Router, Request, Response } from "express";
 import { Database } from "../../db";
+import { validateParams } from "../../middleware/validate";
+import { z } from "zod";
+
+const poolIdParamsSchema = z.object({
+  id: z.string().min(1).refine((v) => v.trim().length > 0, "id is required"),
+});
 
 export function createPoolsRouter(db: Database): Router {
   const router = Router();
 
-  /**
-   * GET /pools
-   * Returns all pools.
-   */
   router.get("/", async (_req: Request, res: Response): Promise<void> => {
     try {
       const pools = await db.listPools();
@@ -19,63 +21,53 @@ export function createPoolsRouter(db: Database): Router {
     }
   });
 
-  /**
-   * GET /pools/:id
-   * Returns the current state of a pool by its ID.
-   */
-  router.get("/:id", async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+  router.get(
+    "/:id",
+    validateParams(poolIdParamsSchema),
+    async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
 
-    if (!id || typeof id !== "string" || id.trim() === "") {
-      res.status(400).json({ error: "id is required", code: "INVALID_ID" });
-      return;
-    }
-
-    const pool = await db.getPool(id);
-    if (!pool) {
-      res.status(404).json({ error: "Pool not found", code: "NOT_FOUND" });
-      return;
-    }
-
-    res.json({
-      ...pool,
-      balance: pool.balance.toString(),
-    });
-  });
-
-  /**
-   * GET /pools/:id/analytics
-   * Returns analytics data for a pool: volume, contributors, activity.
-   */
-  router.get("/:id/analytics", async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-
-    if (!id || typeof id !== "string" || id.trim() === "") {
-      res.status(400).json({ error: "id is required", code: "INVALID_ID" });
-      return;
-    }
-
-    try {
       const pool = await db.getPool(id);
       if (!pool) {
         res.status(404).json({ error: "Pool not found", code: "NOT_FOUND" });
         return;
       }
 
-      const analytics = await db.getPoolAnalytics(id);
       res.json({
-        pool_id: pool.pool_id,
-        token: pool.token,
+        ...pool,
         balance: pool.balance.toString(),
-        admins: pool.admins,
-        threshold: pool.threshold,
-        created_ledger: pool.created_ledger,
-        ...analytics,
       });
-    } catch {
-      res.status(500).json({ error: "Failed to fetch analytics", code: "INTERNAL_ERROR" });
     }
-  });
+  );
+
+  router.get(
+    "/:id/analytics",
+    validateParams(poolIdParamsSchema),
+    async (req: Request, res: Response): Promise<void> => {
+      const { id } = req.params;
+
+      try {
+        const pool = await db.getPool(id);
+        if (!pool) {
+          res.status(404).json({ error: "Pool not found", code: "NOT_FOUND" });
+          return;
+        }
+
+        const analytics = await db.getPoolAnalytics(id);
+        res.json({
+          pool_id: pool.pool_id,
+          token: pool.token,
+          balance: pool.balance.toString(),
+          admins: pool.admins,
+          threshold: pool.threshold,
+          created_ledger: pool.created_ledger,
+          ...analytics,
+        });
+      } catch {
+        res.status(500).json({ error: "Failed to fetch analytics", code: "INTERNAL_ERROR" });
+      }
+    }
+  );
 
   return router;
 }
