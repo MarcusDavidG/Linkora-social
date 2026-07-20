@@ -23,6 +23,7 @@ import { submitAttestation } from "./submitter.js";
 import { AnalyticsReport, SignedAttestation } from "./types.js";
 import { logger } from "./logger.js";
 import { rateLimiter } from "./middleware/rate-limiter.js";
+import { createHealthRouter } from "./routes/health.js";
 
 // Wire sha512 for @noble/ed25519 synchronous API
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
@@ -148,61 +149,29 @@ async function scheduleLoop(currentLedger: bigint): Promise<void> {
 // ── REST API ──────────────────────────────────────────────────────────────────
 
 const app = express();
-const SERVICE_VERSION = process.env["npm_package_version"] ?? "0.1.0";
-const COMMIT_SHA = process.env["COMMIT_SHA"] ?? "unknown";
 const startTime = Date.now();
 
+let started = false;
+let startedAt: string | null = null;
+
+function markStarted(): void {
+  if (started) return;
+  started = true;
+  startedAt = new Date().toISOString();
+}
+
 // ── Health endpoints ──────────────────────────────────────────────────────────
+// Liveness / readiness / startup probes — see routes/health.ts for details.
 
-app.get("/health", async (_req, res) => {
-  const uptime = Math.floor((Date.now() - startTime) / 1000);
-
-  let dbStatus = "disconnected";
-  try {
-    await db.query("SELECT 1");
-    dbStatus = "connected";
-  } catch {
-    /* */
-  }
-
-  let rpcStatus = "unreachable";
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 3000);
-    await fetch(SOROBAN_RPC_URL, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getLatestLedger", params: [] }),
-    }).finally(() => clearTimeout(t));
-    rpcStatus = "reachable";
-  } catch {
-    /* */
-  }
-
-  const ok = dbStatus === "connected" && rpcStatus === "reachable";
-  res.status(ok ? 200 : 503).json({
-    status: ok ? "ok" : "degraded",
-    uptime,
-    version: SERVICE_VERSION,
-    commit: COMMIT_SHA,
-    db: dbStatus,
-    rpc: rpcStatus,
-  });
-});
-
-app.get("/health/ready", async (_req, res) => {
-  try {
-    await db.query("SELECT 1");
-    res.json({ status: "ready" });
-  } catch {
-    res.status(503).json({ status: "not ready", reason: "db unavailable" });
-  }
-});
-
-app.get("/health/live", (_req, res) => {
-  res.json({ status: "live" });
-});
+app.use(
+  createHealthRouter({
+    db,
+    rpcUrl: SOROBAN_RPC_URL,
+    startTime,
+    isStarted: () => started,
+    startedAt: () => startedAt,
+  })
+);
 
 // Per-IP rate limiting applied to attestation-serving endpoints. See
 // services/analytics-oracle/src/middleware/rate-limiter.ts and config.ts.
@@ -253,7 +222,10 @@ async function main(): Promise<void> {
     "Oracle starting"
   );
 
-  app.listen(PORT, () => logger.info({ port: PORT }, "Oracle API listening"));
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, "Oracle API listening");
+    markStarted();
+  });
 
   // Poll every WINDOW_LEDGERS * 5s for simplicity. In production, subscribe
   // to the indexer's event bus WebSocket for exact ledger-close events.
