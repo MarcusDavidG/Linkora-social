@@ -700,28 +700,25 @@ fn test_tip_block_is_unidirectional_blocker_can_still_tip_blocked() {
         &String::from_str(&env, "blocked_user is the author here"),
     );
 
-    // The blocker (A) tips the blocked_user's (B) post — must succeed because
-    // the contract checks is_blocked(post.author=blocked_user, tipper=blocker),
-    // and blocked_user has not blocked anyone.
-    client.tip(&blocker, &post_id, &token, &1_000);
+    // With bidirectional block enforcement, the blocker also cannot tip
+    // the blocked user's posts (is_blocked(blocker, blocked_user) = true).
+    let result = client.try_tip(&blocker, &post_id, &token, &1_000);
+    assert!(
+        result.is_err(),
+        "blocker cannot tip blocked user's post with bidirectional enforcement"
+    );
 
-    // Standard 2.5% fee: fee = 25, author gets 975.
+    // No state should have changed — tip was rejected.
     let token_client = TokenClient::new(&env, &token);
     assert_eq!(
         token_client.balance(&treasury),
-        25,
-        "treasury receives the fee on the blocker's tip"
+        0,
+        "treasury should have no fee when tip is rejected"
     );
     assert_eq!(
         token_client.balance(&blocked_user),
-        10_975,
-        "blocked_user (the author) still receives their share of the tip (10_000 minted at setup + 975 tip share)"
-    );
-
-    let post = client.get_post(&post_id).unwrap();
-    assert_eq!(
-        post.tip_total, 975,
-        "tip_total accumulates even though blocked_user is on someone else's block list"
+        10_000,
+        "blocked_user balance unchanged — no tip received"
     );
 }
 
@@ -4805,12 +4802,10 @@ fn test_follow_blocker_cannot_follow_blocked() {
 fn test_tip_panics_when_tipper_blocked_author() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin, _) = setup_contract(&env);
+    let (client, _, _) = setup_contract(&env);
 
-    let admin_user = Address::generate(&env);
     let tipper = Address::generate(&env);
     let author = Address::generate(&env);
-    client.initialize(&admin_user, &admin, &250);
 
     let token = setup_token(&env, &tipper);
     let post_id = client.create_post(&author, &String::from_str(&env, "test post"));
