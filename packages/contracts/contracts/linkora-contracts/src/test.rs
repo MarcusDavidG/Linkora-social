@@ -3,6 +3,7 @@ extern crate alloc;
 
 use super::*;
 use alloc::string::String as StdString;
+use ed25519_dalek::{Signer, SigningKey};
 use soroban_sdk::{
     symbol_short,
     testutils::{Address as _, Events, Ledger},
@@ -28,6 +29,34 @@ fn setup_contract(env: &Env) -> (LinkoraContractClient<'_>, Address, Address) {
 fn upload_upgrade_wasm(env: &Env) -> BytesN<32> {
     let wasm = Bytes::from_slice(env, include_bytes!("../linkora_contracts.wasm"));
     env.deployer().upload_contract_wasm(wasm)
+}
+
+// ── Credential authority signing helpers ──────────────────────────────────
+//
+// Mirrors `LinkoraContract::credential_root_message_hash` so tests can produce
+// signatures the contract will accept, without exposing that private helper.
+
+fn credential_authority_signing_key(seed: u8) -> SigningKey {
+    SigningKey::from_bytes(&[seed; 32])
+}
+
+fn credential_authority_pubkey(env: &Env, signing_key: &SigningKey) -> BytesN<32> {
+    BytesN::from_array(env, &signing_key.verifying_key().to_bytes())
+}
+
+fn sign_credential_root(env: &Env, signing_key: &SigningKey, root: &BytesN<32>) -> BytesN<64> {
+    let mut data = Bytes::new(env);
+    data.append(&root.to_bytes());
+
+    let ledger = env.ledger().sequence();
+    data.push_back(((ledger >> 24) & 0xff) as u8);
+    data.push_back(((ledger >> 16) & 0xff) as u8);
+    data.push_back(((ledger >> 8) & 0xff) as u8);
+    data.push_back((ledger & 0xff) as u8);
+
+    let message_hash: BytesN<32> = env.crypto().sha256(&data).into();
+    let signature = signing_key.sign(&message_hash.to_array());
+    BytesN::from_array(env, &signature.to_bytes())
 }
 
 #[test]
@@ -4674,4 +4703,179 @@ fn test_717_set_profile_username_32_chars_succeeds() {
     client.set_profile(&user, &username, &token);
     let profile = client.get_profile(&user).unwrap();
     assert_eq!(profile.username, username);
+}
+
+// ── Issue #878: Ed25519 signature verification in update_credential_root ────
+
+#[test]
+fn test_set_credential_authority_by_admin_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+
+    client.set_credential_authority(&admin, &pubkey);
+}
+
+#[test]
+#[should_panic(expected = "Admin role required")]
+fn test_set_credential_authority_by_non_admin_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _treasury) = setup_contract(&env);
+
+    let outsider = Address::generate(&env);
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+
+    client.set_credential_authority(&outsider, &pubkey);
+}
+
+#[test]
+fn test_update_credential_root_valid_signature_accepted() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+    client.set_credential_authority(&admin, &pubkey);
+
+    let user = Address::generate(&env);
+    let new_root = BytesN::from_array(&env, &[7u8; 32]);
+    let signature = sign_credential_root(&env, &signing_key, &new_root);
+
+    client.update_credential_root(&user, &new_root, &signature);
+
+    let stored = client.get_credential_root(&user).unwrap();
+    assert_eq!(stored, new_root);
+}
+
+#[test]
+#[should_panic]
+fn test_update_credential_root_signed_by_wrong_key_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+    client.set_credential_authority(&admin, &pubkey);
+
+    // Attacker signs with a key that was never registered as the authority.
+    let attacker_key = credential_authority_signing_key(99);
+
+    let user = Address::generate(&env);
+    let new_root = BytesN::from_array(&env, &[7u8; 32]);
+    let forged_signature = sign_credential_root(&env, &attacker_key, &new_root);
+
+    client.update_credential_root(&user, &new_root, &forged_signature);
+}
+
+#[test]
+#[should_panic]
+fn test_update_credential_root_signature_for_different_root_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+    client.set_credential_authority(&admin, &pubkey);
+
+    let user = Address::generate(&env);
+    let signed_root = BytesN::from_array(&env, &[7u8; 32]);
+    let signature = sign_credential_root(&env, &signing_key, &signed_root);
+
+    // A valid signature over a *different* root must not authorize this root.
+    let tampered_root = BytesN::from_array(&env, &[8u8; 32]);
+    client.update_credential_root(&user, &tampered_root, &signature);
+}
+
+#[test]
+#[should_panic(expected = "credential authority not set")]
+fn test_update_credential_root_missing_authority_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _treasury) = setup_contract(&env);
+
+    // No call to set_credential_authority — no authority key registered.
+    let signing_key = credential_authority_signing_key(1);
+    let user = Address::generate(&env);
+    let new_root = BytesN::from_array(&env, &[7u8; 32]);
+    let signature = sign_credential_root(&env, &signing_key, &new_root);
+
+    client.update_credential_root(&user, &new_root, &signature);
+}
+
+#[test]
+#[should_panic(expected = "signature must not be an all-zero signature")]
+fn test_update_credential_root_zero_signature_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+    client.set_credential_authority(&admin, &pubkey);
+
+    let user = Address::generate(&env);
+    let new_root = BytesN::from_array(&env, &[7u8; 32]);
+    let zero_signature = BytesN::from_array(&env, &[0u8; 64]);
+
+    client.update_credential_root(&user, &new_root, &zero_signature);
+}
+
+#[test]
+#[should_panic]
+fn test_update_credential_root_rejects_signature_from_rotated_out_authority() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let old_key = credential_authority_signing_key(1);
+    let old_pubkey = credential_authority_pubkey(&env, &old_key);
+    client.set_credential_authority(&admin, &old_pubkey);
+
+    let new_key = credential_authority_signing_key(2);
+    let new_pubkey = credential_authority_pubkey(&env, &new_key);
+    client.set_credential_authority(&admin, &new_pubkey);
+
+    let user = Address::generate(&env);
+    let new_root = BytesN::from_array(&env, &[7u8; 32]);
+    // Signed by the key that was just rotated out.
+    let stale_signature = sign_credential_root(&env, &old_key, &new_root);
+
+    client.update_credential_root(&user, &new_root, &stale_signature);
+}
+
+#[test]
+fn test_verify_credential_nullifier_replay_prevented() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _treasury) = setup_contract(&env);
+
+    let signing_key = credential_authority_signing_key(1);
+    let pubkey = credential_authority_pubkey(&env, &signing_key);
+    client.set_credential_authority(&admin, &pubkey);
+
+    let user = Address::generate(&env);
+    // With an empty Merkle proof, the leaf itself must equal the root.
+    let leaf = BytesN::from_array(&env, &[5u8; 32]);
+    let signature = sign_credential_root(&env, &signing_key, &leaf);
+    client.update_credential_root(&user, &leaf, &signature);
+
+    let nullifier = BytesN::from_array(&env, &[6u8; 32]);
+    let empty_proof = vec![&env];
+
+    let first = client.verify_credential(&user, &empty_proof, &leaf, &nullifier);
+    assert!(
+        first,
+        "first verification with a fresh nullifier must succeed"
+    );
+
+    let second = client.verify_credential(&user, &empty_proof, &leaf, &nullifier);
+    assert!(!second, "replaying the same nullifier must be rejected");
 }

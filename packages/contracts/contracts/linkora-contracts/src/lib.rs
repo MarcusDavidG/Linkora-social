@@ -14,7 +14,7 @@ mod validation;
 use validation::{
     validate_address_list, validate_amount, validate_content, validate_gov_parameter,
     validate_non_default_address, validate_protocol_fee, validate_report_verdict,
-    validate_u32_range, validate_username, MAX_FEE_BPS, MAX_QUORUM,
+    validate_signature, validate_u32_range, validate_username, MAX_FEE_BPS, MAX_QUORUM,
 };
 
 // ── Storage Key Enum ──────────────────────────────────────────────────────────
@@ -44,6 +44,7 @@ pub enum StorageKey {
     DmPublicKey(Address),           // persistent: user -> X25519 public key for encrypted DMs
     CredentialRoot(Address),        // persistent: user -> credential Merkle root
     NullifierSet(Address, BytesN<32>), // persistent: (user, nullifier) -> bool (prevents replay)
+    CredentialAuthority, // persistent: Ed25519 pubkey trusted to sign credential root updates
     // ── Governance ────────────────────────────────────────────────────────
     GovProposal(u64),      // persistent: proposal_id -> GovProposal
     GovVote(u64, Address), // persistent: (proposal_id, voter) -> bool (prevents double-voting)
@@ -891,6 +892,18 @@ impl LinkoraContract {
 
     // ── DM Key Management ─────────────────────────────────────────────────────
 
+    /// Register or rotate the trusted Ed25519 authority key that signs credential
+    /// root updates. Admin only.
+    pub fn set_credential_authority(env: Env, admin: Address, pubkey: BytesN<32>) {
+        Self::bump_instance(&env);
+        admin.require_auth();
+        validate_non_default_address(&env, "admin", &admin);
+        Self::require_role(&env, &admin, Role::Admin);
+        let key = StorageKey::CredentialAuthority;
+        env.storage().persistent().set(&key, &pubkey);
+        Self::bump(&env, &key);
+    }
+
     pub fn update_credential_root(
         env: Env,
         user: Address,
@@ -900,9 +913,20 @@ impl LinkoraContract {
         Self::bump_instance(&env);
         user.require_auth();
         validate_non_default_address(&env, "user", &user);
+        validate_signature(&env, "signature", &signature);
 
-        let _message_hash = Self::credential_root_message_hash(&env, &new_root);
-        let _signature = signature;
+        let authority_key = StorageKey::CredentialAuthority;
+        let authority_pubkey: BytesN<32> = env
+            .storage()
+            .persistent()
+            .get(&authority_key)
+            .expect("credential authority not set");
+        Self::bump(&env, &authority_key);
+
+        // Verify Ed25519 signature: ed25519_verify(pubkey, message, signature).
+        let message_hash = Self::credential_root_message_hash(&env, &new_root);
+        env.crypto()
+            .ed25519_verify(&authority_pubkey, &message_hash.into(), &signature);
 
         let key = StorageKey::CredentialRoot(user.clone());
         env.storage().persistent().set(&key, &new_root);
