@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useWallet } from "@/hooks/useWallet";
 import SearchBar from "@/components/SearchBar";
 import { useNotificationsContext } from "@/contexts/NotificationsContext";
-import { PostComposeModal } from "./PostComposeModal";
+import { CreatePostModal } from "@/components/modals/CreatePostModal";
 import { useKeyboardShortcutsContext } from "@/contexts/KeyboardShortcutsContext";
 import {
   getStoredThemePreference,
@@ -296,10 +296,10 @@ export function NavBar() {
       </nav>
 
       {/* Compose Modal */}
-      <PostComposeModal
+      <CreatePostModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        publicKey={address}
+        author={address}
       />
 
       {/* Mobile Bottom Navigation Bar */}
