@@ -6,8 +6,8 @@
 - [x] Install deps + run existing indexer test suite (all 57 handler tests passing)
 - [x] Create `services/indexer/src/postgres-db.ts` implementing `Database`
 
-- [ ] Update migrations to add `follow_counts` table
-- [ ] Add triggers to keep `follow_counts` consistent on follows insert/delete
+- [x] Update migrations to add `follow_counts` table
+- [x] Add triggers to keep `follow_counts` consistent on follows insert/delete
 
 ## Step 2 — Wire streaming dispatcher
 
