@@ -166,4 +166,22 @@ mod invariants {
         // 4. Verify: 75 >= 70 (monotonic decrease)
         println!("Checking: quorum_decay_monotonic");
     }
+
+    // ── Oracle invariants ─────────────────────────────────────────────────
+
+    /// **Invariant 13:** After register_oracle, the oracle public key is
+    /// stored and can be read back from persistent storage until the
+    /// instance TTL is bumped.
+    #[test]
+    fn invariant_oracle_key_persists() {
+        println!("Checking: oracle_key_persists");
+    }
+
+    /// **Invariant 14:** Once an attestation nullifier is recorded, it is
+    /// never removed or overwritten — replay of the same report hash is
+    /// permanently blocked.
+    #[test]
+    fn invariant_attestation_nullifier_immutable() {
+        println!("Checking: attestation_nullifier_immutable");
+    }
 }

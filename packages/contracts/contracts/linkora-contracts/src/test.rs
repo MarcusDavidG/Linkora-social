@@ -1,5 +1,6 @@
 #![cfg(test)]
 extern crate alloc;
+extern crate std;
 
 use super::*;
 use alloc::string::String as StdString;
@@ -5176,4 +5177,726 @@ fn test_verify_credential_nullifier_replay_prevented() {
 
     let second = client.verify_credential(&user, &empty_proof, &leaf, &nullifier);
     assert!(!second, "replaying the same nullifier must be rejected");
+}
+// ── Oracle attestation helpers ──────────────────────────────────────────────
+
+fn oracle_signing_key(seed: u8) -> SigningKey {
+    SigningKey::from_bytes(&[seed; 32])
+}
+
+fn oracle_pubkey(env: &Env, signing_key: &SigningKey) -> BytesN<32> {
+    BytesN::from_array(env, &signing_key.verifying_key().to_bytes())
+}
+
+fn sign_attestation(env: &Env, signing_key: &SigningKey, report_cbor: &Bytes) -> BytesN<64> {
+    let report_hash: [u8; 32] = env.crypto().sha256(report_cbor).into();
+    let signature = signing_key.sign(&report_hash);
+    BytesN::from_array(env, &signature.to_bytes())
+}
+
+fn register_oracle(
+    client: &LinkoraContractClient<'_>,
+    admin: &Address,
+    name: &Symbol,
+    signing_key: &SigningKey,
+    env: &Env,
+) -> BytesN<32> {
+    let pubkey = oracle_pubkey(env, signing_key);
+    client.register_oracle(admin, name, &pubkey);
+    pubkey
+}
+
+// ── register_oracle tests ───────────────────────────────────────────────────
+
+#[test]
+fn test_register_oracle_admin_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    let pubkey = oracle_pubkey(&env, &signing_key);
+    client.register_oracle(&admin, &symbol_short!("analytics"), &pubkey);
+
+    // Verify by successfully verifying a signed attestation.
+    let report = Bytes::from_slice(&env, b"valid report data");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(result);
+}
+
+#[test]
+fn test_register_oracle_update_key() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    // Register initial oracle.
+    let old_key = oracle_signing_key(1);
+    register_oracle(&client, &admin, &symbol_short!("analytics"), &old_key, &env);
+
+    // Report signed with old key — record is valid before rotation.
+    let report = Bytes::from_slice(&env, b"rotation test");
+    let old_sig = sign_attestation(&env, &old_key, &report);
+    let creator = Address::generate(&env);
+
+    // Old key works before update.
+    assert!(client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &old_sig,
+        &creator,
+        &100u64,
+        &600u64,
+    ));
+
+    // Rotate to a new key.
+    let new_key = oracle_signing_key(2);
+    register_oracle(&client, &admin, &symbol_short!("analytics"), &new_key, &env);
+
+    // Old signature must now fail — sign a different report so nullifier does
+    // not collide, then try the old key's signature on the new report.
+    let report2 = Bytes::from_slice(&env, b"rotation test new");
+    let new_sig = sign_attestation(&env, &new_key, &report2);
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report2,
+        &new_sig,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(result, "new key must verify successfully");
+
+    // Old key on new report must be rejected.
+    let old_sig_on_new = sign_attestation(&env, &old_key, &report2);
+    let result2 = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report2,
+            &old_sig_on_new,
+            &creator,
+            &100u64,
+            &600u64,
+        );
+    }));
+    assert!(result2.is_err(), "old key must not verify after rotation");
+}
+
+#[test]
+#[should_panic(expected = "Admin role required")]
+fn test_register_oracle_non_admin_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _) = setup_contract(&env);
+    let outsider = Address::generate(&env);
+    let signing_key = oracle_signing_key(1);
+    let pubkey = oracle_pubkey(&env, &signing_key);
+    client.register_oracle(&outsider, &symbol_short!("analytics"), &pubkey);
+}
+
+#[test]
+fn test_register_oracle_multiple_names() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let key_a = oracle_signing_key(1);
+    let key_b = oracle_signing_key(2);
+    register_oracle(&client, &admin, &symbol_short!("alpha"), &key_a, &env);
+    register_oracle(&client, &admin, &symbol_short!("beta"), &key_b, &env);
+
+    let report = Bytes::from_slice(&env, b"multi-oracle report");
+    let creator = Address::generate(&env);
+
+    let sig_a = sign_attestation(&env, &key_a, &report);
+    let _sig_b = sign_attestation(&env, &key_b, &report);
+
+    // Submit under alpha, consume nullifier.
+    let r1 = client.verify_analytics_attestation(
+        &symbol_short!("alpha"),
+        &report,
+        &sig_a,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(r1);
+
+    // Beta must verify a *different* report (different nullifier).
+    let report2 = Bytes::from_slice(&env, b"multi-oracle report 2");
+    let sig_b2 = sign_attestation(&env, &key_b, &report2);
+    let r2 = client.verify_analytics_attestation(
+        &symbol_short!("beta"),
+        &report2,
+        &sig_b2,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(r2);
+}
+
+#[test]
+fn test_register_oracle_no_custom_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+
+    // register_oracle does not publish any custom event — it only performs
+    // host-level TTL bumps.  Verify that the function succeeds and the
+    // oracle can be used afterward.
+    let signing_key = oracle_signing_key(1);
+    let pubkey = oracle_pubkey(&env, &signing_key);
+    client.register_oracle(&admin, &symbol_short!("analytics"), &pubkey);
+
+    // Sanity check: registered oracle is usable.
+    let report = Bytes::from_slice(&env, b"sanity check");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+    env.ledger().set_timestamp(500);
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(result);
+}
+
+// ── verify_analytics_attestation tests ───────────────────────────────────────
+
+#[test]
+fn test_verify_valid_attestation() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"valid analytics report");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(result);
+}
+
+#[test]
+fn test_verify_invalid_signature_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"report with bad sig");
+    let wrong_key = oracle_signing_key(2);
+    let bad_signature = sign_attestation(&env, &wrong_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report,
+            &bad_signature,
+            &creator,
+            &100u64,
+            &600u64,
+        );
+    }));
+    assert!(result.is_err(), "invalid signature must panic");
+}
+
+#[test]
+fn test_verify_opaque_report_bytes() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    // The contract does not decode CBOR — empty bytes are valid input.
+    let report = Bytes::new(&env);
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(result, "opaque/empty report bytes must be accepted");
+}
+
+#[test]
+fn test_verify_nullifier_replay_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"replay test");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    // First use — must succeed.
+    let first = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(first);
+
+    // Second use with identical report_cbor — must panic (nullifier replay).
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report,
+            &signature,
+            &creator,
+            &100u64,
+            &600u64,
+        );
+    }));
+    assert!(result.is_err(), "replay of the same nullifier must panic");
+}
+
+#[test]
+fn test_verify_different_nullifiers_accepted() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let creator = Address::generate(&env);
+
+    let report1 = Bytes::from_slice(&env, b"report alpha");
+    let sig1 = sign_attestation(&env, &signing_key, &report1);
+    let r1 = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report1,
+        &sig1,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(r1);
+
+    let report2 = Bytes::from_slice(&env, b"report beta");
+    let sig2 = sign_attestation(&env, &signing_key, &report2);
+    let r2 = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report2,
+        &sig2,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(
+        r2,
+        "different report with different nullifier must be accepted"
+    );
+}
+
+#[test]
+#[should_panic(expected = "window_start must be <= window_end")]
+fn test_verify_window_start_gt_end_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"window violation");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &200u64,
+        &100u64,
+    );
+}
+
+#[test]
+#[should_panic(expected = "oracle not registered")]
+fn test_verify_unknown_oracle_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    // Register oracle under name "real", then verify using name "unknown".
+    let signing_key = oracle_signing_key(1);
+    register_oracle(&client, &admin, &symbol_short!("real"), &signing_key, &env);
+
+    let report = Bytes::from_slice(&env, b"unknown oracle");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    client.verify_analytics_attestation(
+        &symbol_short!("unknown"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+}
+
+#[test]
+#[should_panic(expected = "creator must not be the zero address")]
+fn test_verify_zero_creator_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"creator check");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let zero = Address::from_str(
+        &env,
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    );
+
+    client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &zero,
+        &100u64,
+        &600u64,
+    );
+}
+
+#[test]
+fn test_verify_expired_attestation_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(1000);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"expired attestation");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    // Window [100, 200] is in the past relative to ledger timestamp 1000.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report,
+            &signature,
+            &creator,
+            &100u64,
+            &200u64,
+        );
+    }));
+    assert!(result.is_err(), "expired attestation must be rejected");
+}
+
+#[test]
+fn test_verify_future_attestation_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"future attestation");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    // Window [1000, 2000] is in the future relative to ledger timestamp 500.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report,
+            &signature,
+            &creator,
+            &1000u64,
+            &2000u64,
+        );
+    }));
+    assert!(result.is_err(), "future attestation must be rejected");
+}
+
+// ── Window boundary tests ─────────────────────────────────────────────────
+
+#[test]
+fn test_verify_exactly_at_window_start() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(100);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"at window start");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &200u64,
+    );
+    assert!(result, "timestamp == window_start must be accepted");
+}
+
+#[test]
+fn test_verify_exactly_at_window_end() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(200);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"at window end");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &200u64,
+    );
+    assert!(result, "timestamp == window_end must be accepted");
+}
+
+#[test]
+fn test_verify_just_before_window_start() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(99);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"just before window");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report,
+            &signature,
+            &creator,
+            &100u64,
+            &200u64,
+        );
+    }));
+    assert!(
+        result.is_err(),
+        "timestamp below window_start must be rejected"
+    );
+}
+
+#[test]
+fn test_verify_just_after_window_end() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(201);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"just after window");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.verify_analytics_attestation(
+            &symbol_short!("analytics"),
+            &report,
+            &signature,
+            &creator,
+            &100u64,
+            &200u64,
+        );
+    }));
+    assert!(
+        result.is_err(),
+        "timestamp above window_end must be rejected"
+    );
+}
+
+#[test]
+fn test_verify_attestation_event_emitted() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin, _) = setup_contract(&env);
+    env.ledger().set_timestamp(500);
+
+    let signing_key = oracle_signing_key(1);
+    register_oracle(
+        &client,
+        &admin,
+        &symbol_short!("analytics"),
+        &signing_key,
+        &env,
+    );
+
+    let report = Bytes::from_slice(&env, b"event check report");
+    let signature = sign_attestation(&env, &signing_key, &report);
+    let creator = Address::generate(&env);
+
+    let events_before = env.events().all().events().len();
+
+    let result = client.verify_analytics_attestation(
+        &symbol_short!("analytics"),
+        &report,
+        &signature,
+        &creator,
+        &100u64,
+        &600u64,
+    );
+    assert!(result);
+
+    let events_after = env.events().all().events().len();
+    assert!(
+        events_after > events_before,
+        "verify_analytics_attestation must emit an event"
+    );
 }
