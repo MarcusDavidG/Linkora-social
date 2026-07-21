@@ -931,26 +931,10 @@ impl LinkoraContract {
                     .remove(&StorageKey::Edge(follower.clone(), user.clone()));
                 env.storage()
                     .persistent()
-                    .remove(&StorageKey::FollowingPos(follower.clone(), user.clone()));
-                env.storage()
-                    .persistent()
                     .remove(&StorageKey::FollowersPos(user.clone(), follower.clone()));
 
-                // Decrement follower's FollowingCount
-                let follower_following_count_key = StorageKey::FollowingCount(follower.clone());
-                if let Some(mut following_count) = env
-                    .storage()
-                    .persistent()
-                    .get::<_, u32>(&follower_following_count_key)
-                {
-                    if following_count > 0 {
-                        following_count -= 1;
-                        env.storage()
-                            .persistent()
-                            .set(&follower_following_count_key, &following_count);
-                        Self::bump(&env, &follower_following_count_key);
-                    }
-                }
+                // Swap-remove user from the follower's following list
+                Self::swap_remove_from_index(&env, &follower, &user, true);
             }
             env.storage().persistent().remove(&idx_key);
             entries_removed += 1;
@@ -977,25 +961,9 @@ impl LinkoraContract {
                 env.storage()
                     .persistent()
                     .remove(&StorageKey::FollowingPos(user.clone(), followee.clone()));
-                env.storage()
-                    .persistent()
-                    .remove(&StorageKey::FollowersPos(followee.clone(), user.clone()));
 
-                // Decrement followee's FollowersCount
-                let followee_followers_count_key = StorageKey::FollowersCount(followee.clone());
-                if let Some(mut fc) = env
-                    .storage()
-                    .persistent()
-                    .get::<_, u32>(&followee_followers_count_key)
-                {
-                    if fc > 0 {
-                        fc -= 1;
-                        env.storage()
-                            .persistent()
-                            .set(&followee_followers_count_key, &fc);
-                        Self::bump(&env, &followee_followers_count_key);
-                    }
-                }
+                // Swap-remove user from the followee's followers list
+                Self::swap_remove_from_index(&env, &followee, &user, false);
             }
             env.storage().persistent().remove(&idx_key);
             entries_removed += 1;
