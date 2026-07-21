@@ -2372,6 +2372,15 @@ impl LinkoraContract {
         window_end: u64,
     ) -> bool {
         validate_non_default_address(&env, "creator", &creator);
+        assert!(
+            window_start <= window_end,
+            "window_start must be <= window_end"
+        );
+        let current_time = env.ledger().timestamp();
+        assert!(
+            current_time >= window_start && current_time <= window_end,
+            "attestation outside time window"
+        );
         let oracle_key = StorageKey::OracleKey(oracle_name.clone());
         let pubkey: BytesN<32> = env
             .storage()
