@@ -1,9 +1,42 @@
-declare const require: undefined | ((moduleName: string) => unknown);
 declare const process: undefined | { cwd?: () => string };
 
 export interface CursorStore {
+  /**
+   * Get the current cursor.
+   *
+   * @returns A promise that resolves to the cursor string, or undefined if none exists.
+   *
+   * @example
+   * ```ts
+   * const cursor = await store.get();
+   * console.log("Current cursor:", cursor);
+   * ```
+   */
   get(): Promise<string | undefined>;
+  /**
+   * Set a new cursor.
+   *
+   * @param cursor The new cursor string (e.g., pagingToken).
+   * @returns A promise that resolves when the cursor is saved.
+   *
+   * @example
+   * ```ts
+   * await store.set("123456789-1");
+   * console.log("Cursor updated");
+   * ```
+   */
   set(cursor: string): Promise<void>;
+  /**
+   * Clear the stored cursor.
+   *
+   * @returns A promise that resolves when the cursor is cleared.
+   *
+   * @example
+   * ```ts
+   * await store.clear();
+   * console.log("Cursor cleared");
+   * ```
+   */
   clear(): Promise<void>;
 }
 
@@ -47,6 +80,31 @@ export class LocalStorageCursorStore implements CursorStore {
   }
 }
 
+export interface SecureStoreAdapter {
+  getItemAsync(key: string): Promise<string | null>;
+  setItemAsync(key: string, value: string): Promise<void>;
+  deleteItemAsync(key: string): Promise<void>;
+}
+
+export class SecureStoreCursorStore implements CursorStore {
+  constructor(
+    private readonly secureStore: SecureStoreAdapter,
+    private readonly key = "linkora:lastEventCursor"
+  ) {}
+
+  async get(): Promise<string | undefined> {
+    return (await this.secureStore.getItemAsync(this.key)) ?? undefined;
+  }
+
+  async set(cursor: string): Promise<void> {
+    await this.secureStore.setItemAsync(this.key, cursor);
+  }
+
+  async clear(): Promise<void> {
+    await this.secureStore.deleteItemAsync(this.key);
+  }
+}
+
 export class FileCursorStore implements CursorStore {
   constructor(private path = defaultCursorPath()) {}
 
@@ -85,8 +143,24 @@ export class FileCursorStore implements CursorStore {
   }
 }
 
+/**
+ * Create an appropriate default CursorStore based on the environment.
+ * Uses LocalStorage in browsers, SecureStore in React Native/Expo,
+ * File-based storage in Node.js, and falls back to Memory storage.
+ *
+ * @param keyOrPath Optional key or file path for the storage.
+ * @returns A platform-appropriate CursorStore implementation.
+ *
+ * @example
+ * ```ts
+ * const store = createDefaultCursorStore();
+ * await store.set("12345-1");
+ * ```
+ */
 export function createDefaultCursorStore(keyOrPath?: string): CursorStore {
   if (getLocalStorage()) return new LocalStorageCursorStore(keyOrPath);
+  const secureStore = getSecureStore();
+  if (secureStore) return new SecureStoreCursorStore(secureStore, keyOrPath);
   if (getFs() && getPath()) return new FileCursorStore(keyOrPath);
   return new MemoryCursorStore();
 }
@@ -120,20 +194,41 @@ function getFs():
       };
     }
   | undefined {
-  if (typeof require !== "function") return undefined;
+  const requireFn = getRequire();
+  if (!requireFn) return undefined;
   try {
-    return require("fs") as ReturnType<typeof getFs>;
+    return requireFn("fs") as ReturnType<typeof getFs>;
   } catch (_err) {
     return undefined;
   }
 }
 
+function getSecureStore(): SecureStoreAdapter | undefined {
+  const maybeGlobal = globalThis as {
+    ExpoSecureStore?: SecureStoreAdapter;
+    SecureStore?: SecureStoreAdapter;
+  };
+
+  return maybeGlobal.ExpoSecureStore ?? maybeGlobal.SecureStore;
+}
+
 function getPath():
   | { dirname(path: string): string; join(...parts: string[]): string }
   | undefined {
-  if (typeof require !== "function") return undefined;
+  const requireFn = getRequire();
+  if (!requireFn) return undefined;
   try {
-    return require("path") as ReturnType<typeof getPath>;
+    return requireFn("path") as ReturnType<typeof getPath>;
+  } catch (_err) {
+    return undefined;
+  }
+}
+
+function getRequire(): ((moduleName: string) => unknown) | undefined {
+  try {
+    return (0, eval)("typeof require === 'function' ? require : undefined") as
+      | ((moduleName: string) => unknown)
+      | undefined;
   } catch (_err) {
     return undefined;
   }

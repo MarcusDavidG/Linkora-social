@@ -21,6 +21,9 @@ import { signReport } from "./signer.js";
 import { fetchCreatorStats } from "./db.js";
 import { submitAttestation } from "./submitter.js";
 import { AnalyticsReport, SignedAttestation } from "./types.js";
+import { logger } from "./logger.js";
+import { rateLimiter } from "./middleware/rate-limiter.js";
+import { createHealthRouter } from "./routes/health.js";
 
 // Wire sha512 for @noble/ed25519 synchronous API
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
@@ -40,8 +43,7 @@ const ORACLE_PRIVATE_KEY_HEX = requireEnv("ORACLE_PRIVATE_KEY_HEX");
 const ORACLE_NAME = process.env["ORACLE_NAME"] ?? "default";
 const WINDOW_LEDGERS = BigInt(process.env["WINDOW_LEDGERS"] ?? "1000");
 const PORT = parseInt(process.env["PORT"] ?? "4000", 10);
-const NETWORK_PASSPHRASE =
-  process.env["NETWORK_PASSPHRASE"] ?? "Test SDF Network ; September 2015";
+const NETWORK_PASSPHRASE = process.env["NETWORK_PASSPHRASE"] ?? "Test SDF Network ; September 2015";
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -59,11 +61,17 @@ const attestationCache = new Map<string, SignedAttestation>();
 let lastWindowEnd = BigInt(0);
 
 async function runWindow(windowStart: bigint, windowEnd: bigint): Promise<void> {
-  console.log(`[oracle] computing analytics for ledgers ${windowStart}–${windowEnd}`);
+  logger.info(
+    { windowStart: windowStart.toString(), windowEnd: windowEnd.toString() },
+    "Computing analytics for ledger window"
+  );
 
   const stats = await fetchCreatorStats(db, windowStart, windowEnd);
   if (stats.length === 0) {
-    console.log("[oracle] no active creators in window, skipping");
+    logger.info(
+      { windowStart: windowStart.toString(), windowEnd: windowEnd.toString() },
+      "No active creators in window, skipping"
+    );
     return;
   }
 
@@ -73,7 +81,7 @@ async function runWindow(windowStart: bigint, windowEnd: bigint): Promise<void> 
     try {
       creatorBytes = Keypair.fromPublicKey(s.creatorAddress).rawPublicKey();
     } catch {
-      console.warn(`[oracle] skipping invalid address: ${s.creatorAddress}`);
+      logger.warn({ creatorAddress: s.creatorAddress }, "Skipping invalid address");
       continue;
     }
 
@@ -106,11 +114,9 @@ async function runWindow(windowStart: bigint, windowEnd: bigint): Promise<void> 
         windowStart,
         windowEnd
       );
-      console.log(
-        `[oracle] attested ${s.creatorAddress} tx=${txHash}`
-      );
+      logger.info({ creatorAddress: s.creatorAddress, txHash }, "Creator attested");
     } catch (err) {
-      console.error(`[oracle] submission failed for ${s.creatorAddress}:`, err);
+      logger.error({ creatorAddress: s.creatorAddress, err }, "Attestation submission failed");
       continue;
     }
 
@@ -128,7 +134,8 @@ async function runWindow(windowStart: bigint, windowEnd: bigint): Promise<void> 
 }
 
 async function scheduleLoop(currentLedger: bigint): Promise<void> {
-  const windowStart = lastWindowEnd === BigInt(0) ? currentLedger - WINDOW_LEDGERS : lastWindowEnd + BigInt(1);
+  const windowStart =
+    lastWindowEnd === BigInt(0) ? currentLedger - WINDOW_LEDGERS : lastWindowEnd + BigInt(1);
   const windowEnd = currentLedger;
 
   if (windowEnd <= windowStart) {
@@ -142,6 +149,33 @@ async function scheduleLoop(currentLedger: bigint): Promise<void> {
 // ── REST API ──────────────────────────────────────────────────────────────────
 
 const app = express();
+const startTime = Date.now();
+
+let started = false;
+let startedAt: string | null = null;
+
+function markStarted(): void {
+  if (started) return;
+  started = true;
+  startedAt = new Date().toISOString();
+}
+
+// ── Health endpoints ──────────────────────────────────────────────────────────
+// Liveness / readiness / startup probes — see routes/health.ts for details.
+
+app.use(
+  createHealthRouter({
+    db,
+    rpcUrl: SOROBAN_RPC_URL,
+    startTime,
+    isStarted: () => started,
+    startedAt: () => startedAt,
+  })
+);
+
+// Per-IP rate limiting applied to attestation-serving endpoints. See
+// services/analytics-oracle/src/middleware/rate-limiter.ts and config.ts.
+app.use(rateLimiter);
 
 /**
  * GET /attestations/:creator
@@ -174,23 +208,29 @@ app.get("/attestations/:creator", (req, res) => {
   });
 });
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
-
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const pubkeyHex = Buffer.from(ed.getPublicKey(oraclePrivateKey)).toString("hex");
-  console.log(`[oracle] public key: ${pubkeyHex}`);
-  console.log(`[oracle] stellar address: ${oracleKeypair.publicKey()}`);
-  console.log(`[oracle] contract: ${CONTRACT_ID}`);
-  console.log(`[oracle] window: ${WINDOW_LEDGERS} ledgers`);
+  logger.info(
+    {
+      pubkeyHex,
+      stellarAddress: oracleKeypair.publicKey(),
+      contractId: CONTRACT_ID,
+      windowLedgers: WINDOW_LEDGERS.toString(),
+    },
+    "Oracle starting"
+  );
 
-  app.listen(PORT, () => console.log(`[oracle] API listening on :${PORT}`));
+  app.listen(PORT, () => {
+    logger.info({ port: PORT }, "Oracle API listening");
+    markStarted();
+  });
 
   // Poll every WINDOW_LEDGERS * 5s for simplicity. In production, subscribe
   // to the indexer's event bus WebSocket for exact ledger-close events.
   const pollMs = Number(WINDOW_LEDGERS) * 5_000;
-  console.log(`[oracle] polling every ${pollMs / 1000}s`);
+  logger.info({ pollIntervalMs: pollMs }, "Oracle polling interval set");
 
   const { rpc: StellarRpc } = await import("@stellar/stellar-sdk");
   const server = new StellarRpc.Server(SOROBAN_RPC_URL);
@@ -200,7 +240,7 @@ async function main(): Promise<void> {
       const info = await server.getLatestLedger();
       await scheduleLoop(BigInt(info.sequence));
     } catch (err) {
-      console.error("[oracle] tick error:", err);
+      logger.error({ err }, "Oracle tick error");
     }
   };
 
@@ -210,6 +250,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("[oracle] fatal:", err);
+  logger.error({ err }, "Oracle fatal error");
   process.exit(1);
 });

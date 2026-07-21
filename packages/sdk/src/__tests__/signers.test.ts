@@ -1,9 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { FreighterSigner } from "../signers/freighter";
-import { LedgerSigner } from "../signers/ledger";
-
-// ── FreighterSigner mocks ─────────────────────────────────────────────────────
-
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports */
 const mockFreighterSign = jest.fn();
 const mockFreighterGetPublicKey = jest.fn();
 
@@ -28,6 +23,20 @@ const mockNodeHIDTransport = {
 const mockWebHIDTransport = {
   create: jest.fn(),
 };
+
+jest.mock("@ledgerhq/hw-transport-webhid", () => ({
+  default: mockWebHIDTransport,
+}));
+jest.mock("@ledgerhq/hw-transport-node-hid", () => ({
+  default: mockNodeHIDTransport,
+}));
+jest.mock("@ledgerhq/hw-app-str", () => ({
+  default: mockStrAppConstructor,
+}));
+
+const { FreighterSigner } =
+  require("../signers/freighter") as typeof import("../signers/freighter");
+const { LedgerSigner } = require("../signers/ledger") as typeof import("../signers/ledger");
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -101,23 +110,8 @@ describe("LedgerSigner", () => {
     mockClose.mockResolvedValue(undefined);
     mockNodeHIDTransport.list.mockResolvedValue(["device0"]);
     mockNodeHIDTransport.open.mockResolvedValue(mockTransport);
+    mockWebHIDTransport.create.mockResolvedValue(mockTransport);
     mockStrAppConstructor.mockImplementation(() => mockStrAppInstance);
-
-    jest.mock("@ledgerhq/hw-transport-webhid", () => ({
-      default: mockWebHIDTransport,
-    }));
-    jest.mock("@ledgerhq/hw-transport-node-hid", () => ({
-      default: mockNodeHIDTransport,
-    }));
-    jest.mock("@ledgerhq/hw-app-str", () => ({
-      default: mockStrAppConstructor,
-    }));
-  });
-
-  afterEach(() => {
-    jest.unmock("@ledgerhq/hw-transport-webhid");
-    jest.unmock("@ledgerhq/hw-transport-node-hid");
-    jest.unmock("@ledgerhq/hw-app-str");
   });
 
   it("should initialize LedgerSigner", () => {
@@ -175,7 +169,7 @@ describe("LedgerSigner", () => {
   it("should sign a Transaction object and attach a DecoratedSignature", async () => {
     const mockSigBuffer = Buffer.alloc(64, 0xab);
     // Use a real valid Stellar ed25519 public key (StrKey-encoded)
-    const testPublicKey = "GBVG2QOHHFBVHAEGNF4XRUCAPAGWDROONM2LC4BK6KAISARSLA2UHYHS";
+    const testPublicKey = "GCDGQX3ZFFF6LHBJTQ4C5LYHQ2S4WOFOVSD6WECOCGYUZ6ZJE4CHKGXY";
 
     mockGetPublicKey.mockResolvedValue({ publicKey: testPublicKey });
     mockLedgerSignTransaction.mockResolvedValue({ signature: mockSigBuffer });

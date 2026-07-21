@@ -129,8 +129,14 @@ describe("LinkoraClient simulation and fee injection", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     client = new LinkoraClient({ contractId: CONTRACT_ID, rpcUrl: RPC_URL });
-    mockAddOperation.mockReturnValue(mockSetTimeout);
-    mockSetTimeout.mockReturnValue({ build: mockBuild });
+    const builder = {
+      addOperation: mockAddOperation,
+      setTimeout: mockSetTimeout,
+      setSorobanData: jest.fn().mockReturnThis(),
+      build: mockBuild,
+    };
+    mockAddOperation.mockReturnValue(builder);
+    mockSetTimeout.mockReturnValue(builder);
     mockBuild.mockReturnValue({ toEnvelope: mockToEnvelope });
     mockToEnvelope.mockReturnValue({ toXDR: mockToXDR });
     mockToXDR.mockReturnValue(XDR);
@@ -196,7 +202,7 @@ describe("LinkoraClient simulation and fee injection", () => {
       };
       mockSimulateTransaction.mockResolvedValue(mockResult);
 
-      const sourceAccount = new Account("GSOURCE", 0);
+      const sourceAccount = new Account("GSOURCE", "0");
       const result = await client.prepareTransaction("set_profile", sourceAccount, {
         _type: "scval",
         _val: "GUSER",
@@ -213,7 +219,7 @@ describe("LinkoraClient simulation and fee injection", () => {
       };
       mockSimulateTransaction.mockResolvedValue(mockResult);
 
-      const sourceAccount = new Account("GSOURCE", 0);
+      const sourceAccount = new Account("GSOURCE", "0");
 
       await expect(
         client.prepareTransaction("set_profile", sourceAccount, {
@@ -234,7 +240,7 @@ describe("LinkoraClient simulation and fee injection", () => {
       };
       mockSimulateTransaction.mockResolvedValue(mockResult);
 
-      const sourceAccount = new Account("GSOURCE", 0);
+      const sourceAccount = new Account("GSOURCE", "0");
       const ops = [
         { method: "approve", args: [{ _type: "scval", _val: "TOKEN" }] as any[] },
         { method: "pool_deposit", args: [{ _type: "scval", _val: "POOL" }] as any[] },
@@ -254,7 +260,7 @@ describe("LinkoraClient simulation and fee injection", () => {
       };
       mockSimulateTransaction.mockResolvedValue(mockResult);
 
-      const sourceAccount = new Account("GSOURCE", 0);
+      const sourceAccount = new Account("GSOURCE", "0");
       const ops = [
         { method: "approve", args: [{ _type: "scval", _val: "TOKEN" }] as any[] },
         { method: "pool_deposit", args: [{ _type: "scval", _val: "POOL" }] as any[] },
