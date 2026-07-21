@@ -57,13 +57,13 @@ pub enum StorageKey {
     ReportCount(u64),  // persistent: post_id -> u32 count of reports
 
     // ── Lazy Cleanup (Tombstones & Indexes) ───────────────────────────────
-    DeletedPost(u64),               // persistent: post_id -> bool
-    DeletedProfile(Address),        // persistent: user -> bool
-    PostLikersCount(u64),           // persistent: post_id -> u32
-    PostLikersIdx(u64, u32),        // persistent: (post_id, seq) -> Address
-    PostReportersIdx(u64, u32),     // persistent: (post_id, seq) -> Address (Count is ReportCount)
-    PostTipCooldownsCount(u64),     // persistent: post_id -> u32
-    PostTipCooldownsIdx(u64, u32),  // persistent: (post_id, seq) -> Address
+    DeletedPost(u64),              // persistent: post_id -> bool
+    DeletedProfile(Address),       // persistent: user -> bool
+    PostLikersCount(u64),          // persistent: post_id -> u32
+    PostLikersIdx(u64, u32),       // persistent: (post_id, seq) -> Address
+    PostReportersIdx(u64, u32),    // persistent: (post_id, seq) -> Address (Count is ReportCount)
+    PostTipCooldownsCount(u64),    // persistent: post_id -> u32
+    PostTipCooldownsIdx(u64, u32), // persistent: (post_id, seq) -> Address
 }
 
 #[contracterror]
@@ -889,9 +889,15 @@ impl LinkoraContract {
         env.storage().instance().set(&REGISTERED_USERS, &registered);
 
         // O(1) Deletions
-        env.storage().persistent().remove(&StorageKey::DmPublicKey(user.clone()));
-        env.storage().persistent().remove(&StorageKey::CredentialRoot(user.clone()));
-        env.storage().persistent().remove(&StorageKey::Blocks(user.clone()));
+        env.storage()
+            .persistent()
+            .remove(&StorageKey::DmPublicKey(user.clone()));
+        env.storage()
+            .persistent()
+            .remove(&StorageKey::CredentialRoot(user.clone()));
+        env.storage()
+            .persistent()
+            .remove(&StorageKey::Blocks(user.clone()));
 
         // Tombstone for lazy cleanup
         let tombstone_key = StorageKey::DeletedProfile(user.clone());
@@ -902,27 +908,46 @@ impl LinkoraContract {
     pub fn batch_cleanup_profile(env: Env, user: Address, max_entries: u32) {
         Self::bump_instance(&env);
         let tombstone_key = StorageKey::DeletedProfile(user.clone());
-        assert!(env.storage().persistent().has(&tombstone_key), "profile not deleted");
+        assert!(
+            env.storage().persistent().has(&tombstone_key),
+            "profile not deleted"
+        );
 
         let mut entries_removed = 0;
 
         // Cleanup Followers
         let followers_count_key = StorageKey::FollowersCount(user.clone());
-        let mut f_count: u32 = env.storage().persistent().get(&followers_count_key).unwrap_or(0);
+        let mut f_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&followers_count_key)
+            .unwrap_or(0);
         while f_count > 0 && entries_removed < max_entries {
             f_count -= 1;
             let idx_key = StorageKey::FollowersIdx(user.clone(), f_count);
             if let Some(follower) = env.storage().persistent().get::<_, Address>(&idx_key) {
-                env.storage().persistent().remove(&StorageKey::Edge(follower.clone(), user.clone()));
-                env.storage().persistent().remove(&StorageKey::FollowingPos(follower.clone(), user.clone()));
-                env.storage().persistent().remove(&StorageKey::FollowersPos(user.clone(), follower.clone()));
-                
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::Edge(follower.clone(), user.clone()));
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::FollowingPos(follower.clone(), user.clone()));
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::FollowersPos(user.clone(), follower.clone()));
+
                 // Decrement follower's FollowingCount
                 let follower_following_count_key = StorageKey::FollowingCount(follower.clone());
-                if let Some(mut following_count) = env.storage().persistent().get::<_, u32>(&follower_following_count_key) {
+                if let Some(mut following_count) = env
+                    .storage()
+                    .persistent()
+                    .get::<_, u32>(&follower_following_count_key)
+                {
                     if following_count > 0 {
                         following_count -= 1;
-                        env.storage().persistent().set(&follower_following_count_key, &following_count);
+                        env.storage()
+                            .persistent()
+                            .set(&follower_following_count_key, &following_count);
                         Self::bump(&env, &follower_following_count_key);
                     }
                 }
@@ -930,26 +955,44 @@ impl LinkoraContract {
             env.storage().persistent().remove(&idx_key);
             entries_removed += 1;
         }
-        env.storage().persistent().set(&followers_count_key, &f_count);
+        env.storage()
+            .persistent()
+            .set(&followers_count_key, &f_count);
         Self::bump(&env, &followers_count_key);
 
         // Cleanup Following
         let following_count_key = StorageKey::FollowingCount(user.clone());
-        let mut following_count: u32 = env.storage().persistent().get(&following_count_key).unwrap_or(0);
+        let mut following_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&following_count_key)
+            .unwrap_or(0);
         while following_count > 0 && entries_removed < max_entries {
             following_count -= 1;
             let idx_key = StorageKey::FollowingIdx(user.clone(), following_count);
             if let Some(followee) = env.storage().persistent().get::<_, Address>(&idx_key) {
-                env.storage().persistent().remove(&StorageKey::Edge(user.clone(), followee.clone()));
-                env.storage().persistent().remove(&StorageKey::FollowingPos(user.clone(), followee.clone()));
-                env.storage().persistent().remove(&StorageKey::FollowersPos(followee.clone(), user.clone()));
-                
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::Edge(user.clone(), followee.clone()));
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::FollowingPos(user.clone(), followee.clone()));
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::FollowersPos(followee.clone(), user.clone()));
+
                 // Decrement followee's FollowersCount
                 let followee_followers_count_key = StorageKey::FollowersCount(followee.clone());
-                if let Some(mut fc) = env.storage().persistent().get::<_, u32>(&followee_followers_count_key) {
+                if let Some(mut fc) = env
+                    .storage()
+                    .persistent()
+                    .get::<_, u32>(&followee_followers_count_key)
+                {
                     if fc > 0 {
                         fc -= 1;
-                        env.storage().persistent().set(&followee_followers_count_key, &fc);
+                        env.storage()
+                            .persistent()
+                            .set(&followee_followers_count_key, &fc);
                         Self::bump(&env, &followee_followers_count_key);
                     }
                 }
@@ -957,25 +1000,33 @@ impl LinkoraContract {
             env.storage().persistent().remove(&idx_key);
             entries_removed += 1;
         }
-        env.storage().persistent().set(&following_count_key, &following_count);
+        env.storage()
+            .persistent()
+            .set(&following_count_key, &following_count);
         Self::bump(&env, &following_count_key);
 
         // Cleanup Authored Posts
         let author_key = StorageKey::AuthorPosts(user.clone());
-        let mut author_posts: Vec<u64> = env.storage().persistent().get(&author_key).unwrap_or(Vec::new(&env));
+        let mut author_posts: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&author_key)
+            .unwrap_or(Vec::new(&env));
         let mut i = author_posts.len();
         while i > 0 && entries_removed < max_entries {
             i -= 1;
             let post_id = author_posts.get(i).unwrap();
-            
+
             // Tombstone the post
             let post_tombstone = StorageKey::DeletedPost(post_id);
             env.storage().persistent().set(&post_tombstone, &true);
             Self::bump(&env, &post_tombstone);
-            
+
             // Delete post object itself
-            env.storage().persistent().remove(&StorageKey::Post(post_id));
-            
+            env.storage()
+                .persistent()
+                .remove(&StorageKey::Post(post_id));
+
             author_posts.remove(i);
             entries_removed += 1;
         }
@@ -1593,18 +1644,27 @@ impl LinkoraContract {
     pub fn batch_cleanup_post(env: Env, post_id: u64, max_entries: u32) {
         Self::bump_instance(&env);
         let tombstone_key = StorageKey::DeletedPost(post_id);
-        assert!(env.storage().persistent().has(&tombstone_key), "post not deleted");
+        assert!(
+            env.storage().persistent().has(&tombstone_key),
+            "post not deleted"
+        );
 
         let mut entries_removed = 0;
 
         // Cleanup Likes
         let likes_count_key = StorageKey::PostLikersCount(post_id);
-        let mut likes_count: u32 = env.storage().persistent().get(&likes_count_key).unwrap_or(0);
+        let mut likes_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&likes_count_key)
+            .unwrap_or(0);
         while likes_count > 0 && entries_removed < max_entries {
             likes_count -= 1;
             let idx_key = StorageKey::PostLikersIdx(post_id, likes_count);
             if let Some(liker) = env.storage().persistent().get::<_, Address>(&idx_key) {
-                env.storage().persistent().remove(&StorageKey::Like(post_id, liker));
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::Like(post_id, liker));
                 env.storage().persistent().remove(&idx_key);
             }
             entries_removed += 1;
@@ -1612,18 +1672,26 @@ impl LinkoraContract {
         if likes_count == 0 {
             env.storage().persistent().remove(&likes_count_key);
         } else {
-            env.storage().persistent().set(&likes_count_key, &likes_count);
+            env.storage()
+                .persistent()
+                .set(&likes_count_key, &likes_count);
             Self::bump(&env, &likes_count_key);
         }
 
         // Cleanup Reports
         let reports_count_key = StorageKey::ReportCount(post_id);
-        let mut reports_count: u32 = env.storage().persistent().get(&reports_count_key).unwrap_or(0);
+        let mut reports_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&reports_count_key)
+            .unwrap_or(0);
         while reports_count > 0 && entries_removed < max_entries {
             reports_count -= 1;
             let idx_key = StorageKey::PostReportersIdx(post_id, reports_count);
             if let Some(reporter) = env.storage().persistent().get::<_, Address>(&idx_key) {
-                env.storage().persistent().remove(&StorageKey::Report(post_id, reporter));
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::Report(post_id, reporter));
                 env.storage().persistent().remove(&idx_key);
             }
             entries_removed += 1;
@@ -1631,7 +1699,9 @@ impl LinkoraContract {
         if reports_count == 0 {
             env.storage().persistent().remove(&reports_count_key);
         } else {
-            env.storage().persistent().set(&reports_count_key, &reports_count);
+            env.storage()
+                .persistent()
+                .set(&reports_count_key, &reports_count);
             Self::bump(&env, &reports_count_key);
         }
 
@@ -1642,7 +1712,9 @@ impl LinkoraContract {
             tc_count -= 1;
             let idx_key = StorageKey::PostTipCooldownsIdx(post_id, tc_count);
             if let Some(tipper) = env.storage().persistent().get::<_, Address>(&idx_key) {
-                env.storage().temporary().remove(&StorageKey::TipCooldown(post_id, tipper));
+                env.storage()
+                    .temporary()
+                    .remove(&StorageKey::TipCooldown(post_id, tipper));
                 env.storage().persistent().remove(&idx_key);
             }
             entries_removed += 1;
@@ -1714,12 +1786,14 @@ impl LinkoraContract {
         post.like_count += 1;
         env.storage().persistent().set(&post_key, &post);
         Self::bump(&env, &post_key);
-        
+
         env.storage().persistent().set(&like_idx_key, &user);
         Self::bump(&env, &like_idx_key);
 
         let count_key = StorageKey::PostLikersCount(post_id);
-        env.storage().persistent().set(&count_key, &(post.like_count as u32));
+        env.storage()
+            .persistent()
+            .set(&count_key, &(post.like_count as u32));
         Self::bump(&env, &count_key);
 
         env.storage().persistent().set(&like_key, &true);
@@ -2749,7 +2823,7 @@ impl LinkoraContract {
 
         let count_key = StorageKey::ReportCount(post_id);
         let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-        
+
         let rep_idx_key = StorageKey::PostReportersIdx(post_id, count);
         env.storage().persistent().set(&rep_idx_key, &reporter);
         Self::bump(&env, &rep_idx_key);
