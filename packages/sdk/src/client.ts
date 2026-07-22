@@ -1,4 +1,4 @@
-import { rpc } from "@stellar/stellar-sdk/rpc";
+import * as rpc from "@stellar/stellar-sdk/rpc";
 import {
   Contract,
   nativeToScVal,

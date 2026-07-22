@@ -2,7 +2,7 @@ import { ConnectionHealthMonitor, ConnectionStatus } from "../health";
 
 const mockGetLatestLedger = jest.fn();
 
-jest.mock("@stellar/stellar-sdk", () => ({
+jest.mock("@stellar/stellar-sdk/rpc", () => ({
   rpc: {
     Server: jest.fn().mockImplementation(() => ({ getLatestLedger: mockGetLatestLedger })),
     Api: {
@@ -10,6 +10,9 @@ jest.mock("@stellar/stellar-sdk", () => ({
       isSimulationSuccess: (r: unknown) => !!(r as { result?: unknown }).result,
     },
   },
+}));
+
+jest.mock("@stellar/stellar-base", () => ({
   Contract: jest.fn(() => ({ call: jest.fn() })),
   nativeToScVal: jest.fn((v: unknown) => v),
   scValToNative: jest.fn((v: unknown) => v),
