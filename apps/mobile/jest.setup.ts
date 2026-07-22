@@ -1,32 +1,8 @@
 // Jest setup for React Native testing
 import "react-native-gesture-handler/jestSetup";
 
-// Mock react-native-reanimated (version mismatch with react-native@0.72)
-jest.mock("react-native-reanimated", () => {
-  const RN = jest.requireActual("react-native");
-  return {
-    __esModule: true,
-    default: {
-      View: RN.View,
-      Text: RN.Text,
-      Image: RN.Image,
-      ScrollView: RN.ScrollView,
-      createAnimatedComponent: (c: unknown) => c,
-    },
-    useSharedValue: (v: unknown) => ({ value: v }),
-    useAnimatedStyle: (fn: () => unknown) => fn(),
-    withTiming: (v: unknown) => v,
-    withSpring: (v: unknown) => v,
-    withRepeat: (v: unknown) => v,
-    withSequence: (...args: unknown[]) => args[0],
-    Easing: { linear: (t: unknown) => t, inOut: (fn: unknown) => fn, ease: 0 },
-    cancelAnimation: jest.fn(),
-    interpolate: (_v: unknown, _in: unknown, out: unknown[]) => out[0],
-    Extrapolation: { CLAMP: "clamp" },
-    runOnJS: (fn: unknown) => fn,
-    createAnimatedComponent: (c: unknown) => c,
-  };
-});
+// Official jest mock shipped by react-native-reanimated (kept in sync with its own API surface)
+jest.mock("react-native-reanimated", () => require("react-native-reanimated/mock"));
 
 // Global test timeout
 jest.setTimeout(10000);
