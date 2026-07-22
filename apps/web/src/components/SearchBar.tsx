@@ -152,7 +152,7 @@ export default function SearchBar({
   };
 
   const showDropdown =
-    isFocused && (query.trim() ? suggestions.length > 0 : recentSearches.length > 0);
+    isFocused && (query.trim() ? suggestions.length > 0 || loading : recentSearches.length > 0);
   const currentSuggestions = query.trim()
     ? suggestions
     : recentSearches.map((s: string) => ({ type: "recent" as const, value: s }));

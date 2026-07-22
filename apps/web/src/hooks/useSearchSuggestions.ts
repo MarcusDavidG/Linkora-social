@@ -13,7 +13,7 @@ interface UseSearchSuggestionsOptions {
   maxSuggestions?: number;
 }
 
-const INDEXER_API_URL = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? "http://localhost:3001";
+const INDEXER_API_URL = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? "";
 
 export function useSearchSuggestions({
   debounceMs = 300,

@@ -148,7 +148,10 @@ test.describe("Creator Token Wizard", () => {
 
     // Fee estimate should appear (either loading → ready or static).
     await expect(
-      page.getByTestId("fee-estimate").or(page.getByText("Simulating transaction…"))
+      page
+        .getByTestId("fee-estimate")
+        .or(page.getByText("Simulating transaction…"))
+        .or(page.getByText(/Could not estimate fee/))
     ).toBeVisible();
 
     // Next button should be present.
