@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { LinkoraClient } from "../client";
 import { SimulationError } from "../errors";
-import { Account } from "@stellar/stellar-sdk";
+import { Account } from "@stellar/stellar-base";
 
 const mockCall = jest.fn();
 const mockBuild = jest.fn();
