@@ -20,12 +20,10 @@ const mockSimulate = jest.fn();
 const mockGetPublicKey = jest.fn(() => "GFAKEKEY111111111111111111111111");
 
 jest.mock("@stellar/stellar-sdk/rpc", () => ({
-  rpc: {
-    Server: jest.fn(() => ({ simulateTransaction: mockSimulate })),
-    Api: {
-      isSimulationError: jest.fn(() => false),
-      isSimulationSuccess: jest.fn(() => true),
-    },
+  Server: jest.fn(() => ({ simulateTransaction: mockSimulate })),
+  Api: {
+    isSimulationError: jest.fn(() => false),
+    isSimulationSuccess: jest.fn(() => true),
   },
 }));
 
@@ -189,7 +187,9 @@ describe("LinkoraClient — token factory methods", () => {
         error: undefined,
       });
 
-      const { rpc } = jest.requireMock("@stellar/stellar-sdk/rpc");
+      const rpc = jest.requireMock("@stellar/stellar-sdk/rpc") as {
+        Api: { isSimulationSuccess: jest.Mock; isSimulationError: jest.Mock };
+      };
       rpc.Api.isSimulationSuccess.mockReturnValue(true);
       rpc.Api.isSimulationError.mockReturnValue(false);
 
@@ -218,7 +218,9 @@ describe("LinkoraClient — token factory methods", () => {
         error: undefined,
       });
 
-      const { rpc } = jest.requireMock("@stellar/stellar-sdk/rpc");
+      const rpc = jest.requireMock("@stellar/stellar-sdk/rpc") as {
+        Api: { isSimulationSuccess: jest.Mock; isSimulationError: jest.Mock };
+      };
       rpc.Api.isSimulationSuccess.mockReturnValue(true);
       rpc.Api.isSimulationError.mockReturnValue(false);
 

@@ -10,12 +10,10 @@ const mockAddOperation = jest.fn();
 const mockSetTimeout = jest.fn();
 
 jest.mock("@stellar/stellar-sdk/rpc", () => ({
-  rpc: {
-    Server: jest.fn(() => ({ simulateTransaction: mockSimulate })),
-    Api: {
-      isSimulationError: (r: unknown) => !!(r as { error?: unknown }).error,
-      isSimulationSuccess: (r: unknown) => !!(r as { result?: unknown }).result,
-    },
+  Server: jest.fn(() => ({ simulateTransaction: mockSimulate })),
+  Api: {
+    isSimulationError: (r: unknown) => !!(r as { error?: unknown }).error,
+    isSimulationSuccess: (r: unknown) => !!(r as { result?: unknown }).result,
   },
 }));
 

@@ -1141,3 +1141,42 @@
 {"_e":"metro:client_log","_t":1784724839961,"level":"warn","data":["Route \"./profile/[address].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
 {"_e":"metro:client_log","_t":1784724839999,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
 {"_e":"metro:client_log","_t":1784724840000,"level":"warn","data":["Route \"./settings/blocked.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:bundling:started","_t":1784724852331,"id":"n","platform":"android","environment":null,"entry":"node_modules/.pnpm/expo-router@57.0.7_57csglmqgxanwjjglqhx3e76pu/node_modules/expo-router/entry.js"}
+{"_e":"metro:bundling:progress","_t":1784724852332,"id":"n","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1784724852587,"id":"n","total":1,"ms":254.939929}
+{"_e":"metro:client_log","_t":1784724863857,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724863926,"level":"warn","data":["Route \"./(tabs)/feed.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724864036,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724864037,"level":"warn","data":["Route \"./(tabs)/profile.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724864044,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724864045,"level":"warn","data":["Route \"./dm/[address].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724864313,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724864314,"level":"warn","data":["Route \"./post/[id].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724864321,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724864322,"level":"warn","data":["Route \"./post/new.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724864330,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724864332,"level":"warn","data":["Route \"./profile/[address].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724864373,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724864374,"level":"warn","data":["Route \"./settings/blocked.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:bundling:started","_t":1784724892385,"id":"w","platform":"android","environment":null,"entry":"node_modules/.pnpm/expo-router@57.0.7_57csglmqgxanwjjglqhx3e76pu/node_modules/expo-router/entry.js"}
+{"_e":"metro:bundling:progress","_t":1784724892385,"id":"w","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1784724892506,"id":"w","total":1,"ms":120.288708}
+{"_e":"metro:client_log","_t":1784724903878,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724903948,"level":"warn","data":["Route \"./(tabs)/feed.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724904060,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724904061,"level":"warn","data":["Route \"./(tabs)/profile.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724904069,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724904070,"level":"warn","data":["Route \"./dm/[address].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724904324,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724904329,"level":"warn","data":["Route \"./post/[id].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724904331,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724904332,"level":"warn","data":["Route \"./post/new.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724904351,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724904351,"level":"warn","data":["Route \"./profile/[address].tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:client_log","_t":1784724904380,"level":"error","data":["[TypeError: Cannot read property 'Api' of undefined]"]}
+{"_e":"metro:client_log","_t":1784724904381,"level":"warn","data":["Route \"./settings/blocked.tsx\" is missing the required default export. Ensure a React component is exported as default."]}
+{"_e":"metro:bundling:failed","_t":1784725029687,"id":null,"message":"Unable to resolve \"linkora-sdk\" from \"apps/mobile/hooks/useLike.ts\"","importStack":null,"filename":null,"targetModuleName":"linkora-sdk","originModulePath":"apps/mobile/hooks/useLike.ts"}
+{"_e":"metro:bundling:failed","_t":1784725031688,"id":null,"message":"Unable to resolve \"linkora-sdk\" from \"apps/mobile/hooks/useLike.ts\"","importStack":null,"filename":null,"targetModuleName":"linkora-sdk","originModulePath":"apps/mobile/hooks/useLike.ts"}
+{"_e":"metro:bundling:failed","_t":1784725031744,"id":null,"message":"Unable to resolve \"linkora-sdk\" from \"apps/mobile/hooks/useLike.ts\"","importStack":null,"filename":null,"targetModuleName":"linkora-sdk","originModulePath":"apps/mobile/hooks/useLike.ts"}
+{"_e":"metro:bundling:failed","_t":1784725032409,"id":null,"message":"Unable to resolve \"linkora-sdk\" from \"apps/mobile/hooks/useLike.ts\"","importStack":null,"filename":null,"targetModuleName":"linkora-sdk","originModulePath":"apps/mobile/hooks/useLike.ts"}
+{"_e":"metro:bundling:failed","_t":1784725033008,"id":null,"message":"Unable to resolve \"./generated/types\" from \"packages/sdk/dist/client.js\"\n  39 | const client_1 = require(\"./generated/client\");\n  40 | const errors_1 = require(\"./errors\");\n> 41 | const types_1 = require(\"./generated/types\");\n     |                          ^\n  42 | const health_1 = require(\"./health\");\n  43 | const { isSimulationError, isSimulationSuccess } = rpc.Api;\n  44 | const DEFAULT_NETWORK = \"Test SDF Network ; September 2015\";","importStack":"\u001b[1mImport stack:\u001b[22m\n\n\u001b[90m \u001b[39mpackages/sdk/dist/client.js\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./generated/types\"\u001b[39m\n\n\u001b[90m \u001b[39mpackages/sdk/dist/index.js\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"./client\"\u001b[39m\n\n\u001b[90m \u001b[39mapps/mobile/hooks/useProfile.ts\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"linkora-sdk\"\u001b[39m\n\n\u001b[90m \u001b[39mapps/mobile/app/(tabs)/profile.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"../../hooks/useProfile\"\u001b[39m\n\n\u001b[90m \u001b[39mapps/mobile/app\u001b[2m (require.context)\u001b[22m\n","filename":null,"targetModuleName":"./generated/types","originModulePath":"packages/sdk/dist/client.js"}
