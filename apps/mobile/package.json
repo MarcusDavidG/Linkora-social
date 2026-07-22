@@ -2,7 +2,7 @@
   "name": "@linkora/mobile",
   "version": "0.0.0",
   "private": true,
-  "main": "src/index.ts",
+  "main": "expo-router/entry",
   "license": "MIT",
   "scripts": {
     "dev": "expo start",
