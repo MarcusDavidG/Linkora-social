@@ -14,7 +14,6 @@ import { WebSocketServer, WebSocket } from "ws";
 import { Database } from "./database";
 import { AuthService } from "./auth";
 import { CleanupService } from "./cleanup";
-import { logger } from "./logger";
 import { createRouter, registerWsClient } from "./routes";
 import {
   requestIdMiddleware,
@@ -25,6 +24,8 @@ import {
 } from "./middleware";
 import { messageAuthMiddleware } from "./middleware/auth";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
+import { createHealthRouter } from "./routes/health";
+import { logger } from "./logger";
 
 // Load environment variables
 dotenv.config();
@@ -44,6 +45,10 @@ const config = {
   stellarNetwork: process.env.STELLAR_NETWORK || "Testnet",
   idempotencyTtlHours: parseInt(process.env.IDEMPOTENCY_TTL_HOURS || "24"),
 };
+
+let started = false;
+let startedAt: string | null = null;
+let shuttingDown = false;
 
 async function createApp() {
   const app = express();
@@ -98,6 +103,17 @@ async function createApp() {
   app.use("/api", createRouter(database, authService));
 
   // ── Health endpoints ───────────────────────────────────────────────────────
+  // Liveness / readiness / startup probes — see routes/health.ts for details.
+
+  app.use(
+    createHealthRouter({
+      db: database,
+      startTime,
+      isStarted: () => started,
+      startedAt: () => startedAt,
+      isShuttingDown: () => shuttingDown,
+    })
+  );
 
   app.get("/health", async (_req, res) => {
     const uptime = Math.floor((Date.now() - startTime) / 1000);
@@ -116,19 +132,6 @@ async function createApp() {
       commit: COMMIT_SHA,
       db: dbStatus,
     });
-  });
-
-  app.get("/health/ready", async (_req, res) => {
-    try {
-      await database.ping();
-      res.json({ status: "ready" });
-    } catch {
-      res.status(503).json({ status: "not ready", reason: "db unavailable" });
-    }
-  });
-
-  app.get("/health/live", (_req, res) => {
-    res.json({ status: "live" });
   });
 
   // Root info
@@ -159,6 +162,7 @@ async function createApp() {
   // Graceful shutdown
   const gracefulShutdown = async (signal: string) => {
     logger.info({ signal }, "Starting graceful shutdown...");
+    shuttingDown = true;
 
     wss.close();
     cleanupService.stop();
@@ -183,6 +187,8 @@ async function startServer() {
         { port: config.port, env: config.nodeEnv, ttlDays: config.messageTtlDays },
         "DM Relay service started"
       );
+      started = true;
+      startedAt = new Date().toISOString();
     });
 
     return server;
