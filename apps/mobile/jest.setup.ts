@@ -1,7 +1,15 @@
 // Jest setup for React Native testing
 import "react-native-gesture-handler/jestSetup";
 
-// Mock react-native-reanimated (version mismatch with react-native@0.72)
+// react-native-reanimated v4's own mock.js pulls in react-native-worklets' real
+// native-module bootstrap, which throws outside a device/simulator. Stub both
+// packages with plain JS so no native binding is ever touched in tests.
+jest.mock("react-native-worklets", () => ({
+  __esModule: true,
+  runOnJS: (fn: unknown) => fn,
+  runOnUI: (fn: unknown) => fn,
+}));
+
 jest.mock("react-native-reanimated", () => {
   const RN = jest.requireActual("react-native");
   return {
