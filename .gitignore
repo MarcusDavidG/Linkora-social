@@ -29,3 +29,6 @@ package-lock.json
 
 apps/mobile/android/
 apps/mobile/ios/
+
+app/apps/mobile/components/__snapshots__/
+app/apps/mobile/components/__tests__/

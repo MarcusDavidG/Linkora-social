@@ -1,5 +1,17 @@
 import React from "react";
 import renderer from "react-test-renderer";
+
+// react-native's real useColorScheme() subscribes to Appearance via
+// useSyncExternalStore; under bare react-test-renderer (no act()) that
+// subscription resolves asynchronously and blows up snapshots with a null
+// tree. Mock the theme hook the same way ProfileHeader.test.tsx does.
+jest.mock("../../theme/useTheme", () => {
+  const { themes } = jest.requireActual("../../theme/tokens");
+  return {
+    useTheme: () => ({ theme: themes.light, colorScheme: "light", isDark: false }),
+  };
+});
+
 import { PostCard, Post } from "../PostCard";
 
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));

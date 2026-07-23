@@ -67,6 +67,7 @@ describe("deep link screens", () => {
   it("renders pool details shell", () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ id: "pool-1" });
     const { getByText } = render(<PoolsDetailScreen />);
-    expect(getByText("Pool details coming soon.")).toBeTruthy();
+    expect(getByText("pool-1")).toBeTruthy();
+    expect(getByText("Community managed pool")).toBeTruthy();
   });
 });
