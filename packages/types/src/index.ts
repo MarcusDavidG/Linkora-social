@@ -37,6 +37,6 @@ export type {
   GovConfig,
 } from "linkora-sdk";
 
-export type { GeneratedLinkoraClient, LinkoraEvent as LinkoraEventUnion } from "linkora-sdk";
+export type { LinkoraEvent as LinkoraEventUnion } from "linkora-sdk";
 
 export type { ClientConfig, LinkoraClient } from "linkora-sdk";
