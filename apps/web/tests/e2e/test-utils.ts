@@ -108,7 +108,9 @@ export async function navigateToFeed(page: Page): Promise<void> {
 
 export async function createPost(page: Page, content: string): Promise<void> {
   const composeButton = page
-    .locator('button:has-text("Compose"), button:has-text("New Post")')
+    .locator(
+      'button:has-text("Compose"), button:has-text("New Post"), button:has-text("Create Post")'
+    )
     .first();
   await composeButton.click();
 

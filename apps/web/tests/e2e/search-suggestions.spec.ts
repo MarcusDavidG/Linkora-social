@@ -93,6 +93,7 @@ test.describe("Search Suggestions", () => {
     const searchBox = page.getByRole("search").first().locator("input");
 
     // Type to trigger suggestions
+    await searchBox.focus();
     await searchBox.fill("ali");
 
     // Wait for debounce and API call
@@ -108,6 +109,7 @@ test.describe("Search Suggestions", () => {
   test("highlights matching text in suggestions", async ({ page }) => {
     const searchBox = page.getByRole("search").first().locator("input");
 
+    await searchBox.focus();
     await searchBox.fill("alice");
     await page.waitForTimeout(400);
 
@@ -119,6 +121,7 @@ test.describe("Search Suggestions", () => {
   test("can click on a suggestion to perform search", async ({ page }) => {
     const searchBox = page.getByRole("search").first().locator("input");
 
+    await searchBox.focus();
     await searchBox.fill("ali");
     await page.waitForTimeout(400);
 
@@ -135,6 +138,7 @@ test.describe("Search Suggestions", () => {
   test("keyboard navigation works in suggestions", async ({ page }) => {
     const searchBox = page.getByRole("search").first().locator("input");
 
+    await searchBox.focus();
     await searchBox.fill("ali");
     await page.waitForTimeout(400);
 
@@ -155,6 +159,7 @@ test.describe("Search Suggestions", () => {
   test("escape key closes suggestions dropdown", async ({ page }) => {
     const searchBox = page.getByRole("search").first().locator("input");
 
+    await searchBox.focus();
     await searchBox.fill("ali");
     await page.waitForTimeout(400);
 
@@ -216,6 +221,7 @@ test.describe("Search Suggestions", () => {
   test("hashtag suggestions appear for queries starting with #", async ({ page }) => {
     const searchBox = page.getByRole("search").first().locator("input");
 
+    await searchBox.focus();
     await searchBox.fill("#stellar");
     await page.waitForTimeout(400);
 
@@ -228,13 +234,13 @@ test.describe("Search Suggestions", () => {
     const searchBox = page.getByRole("search").first().locator("input");
     await searchBox.focus();
     await searchBox.fill("slow");
-    await page.waitForTimeout(350);
     await expect(page.getByText("Loading suggestions...")).toBeVisible();
   });
 
   test("clicking outside closes the dropdown", async ({ page }) => {
     const searchBox = page.getByRole("search").first().locator("input");
 
+    await searchBox.focus();
     await searchBox.fill("ali");
     await page.waitForTimeout(400);
 
@@ -273,6 +279,7 @@ test.describe("Search Suggestions", () => {
     const searchButton = page.getByRole("search").first().getByRole("button", { name: "Search" });
 
     // Perform a search
+    await searchBox.focus();
     await searchBox.fill("persistent search");
     await searchButton.click();
 

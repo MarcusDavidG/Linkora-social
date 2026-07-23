@@ -45,8 +45,12 @@ export default function SearchBar({
   const { recentSearches, addRecentSearch, clearRecentSearches, removeRecentSearch } =
     useRecentSearches();
 
+  const prevInitialValueRef = useRef(initialValue);
   useEffect(() => {
-    setQuery(initialValue);
+    if (prevInitialValueRef.current !== initialValue) {
+      prevInitialValueRef.current = initialValue;
+      setQuery(initialValue);
+    }
   }, [initialValue]);
 
   // Fetch suggestions when query changes and input is focused
@@ -166,7 +170,10 @@ export default function SearchBar({
             type="text"
             role="combobox"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setIsFocused(true);
+              setQuery(e.target.value);
+            }}
             onFocus={() => setIsFocused(true)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
