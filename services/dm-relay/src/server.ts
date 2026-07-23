@@ -43,6 +43,7 @@ const config = {
   messageTtlDays: parseInt(process.env.MESSAGE_TTL_DAYS || "7"),
   maxTimestampSkew: parseInt(process.env.MAX_TIMESTAMP_SKEW || "30"),
   stellarNetwork: process.env.STELLAR_NETWORK || "Testnet",
+  idempotencyTtlHours: parseInt(process.env.IDEMPOTENCY_TTL_HOURS || "24"),
 };
 
 let started = false;
@@ -81,7 +82,11 @@ async function createApp() {
   const authService = new AuthService(config.maxTimestampSkew, config.stellarNetwork);
 
   // Initialize cleanup service
-  const cleanupService = new CleanupService(database, config.messageTtlDays);
+  const cleanupService = new CleanupService(
+    database,
+    config.messageTtlDays,
+    config.idempotencyTtlHours
+  );
   cleanupService.start();
 
   // Custom middleware
