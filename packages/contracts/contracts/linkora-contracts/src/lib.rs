@@ -971,9 +971,7 @@ impl LinkoraContract {
         env.storage()
             .persistent()
             .set(&following_count_key, &following_count);
-        Self::bump(&env, &following_count_key);
-
-        // Cleanup Authored Posts
+        Self::bump(&env, &following_count_key);            // Cleanup Authored Posts
         let author_key = StorageKey::AuthorPosts(user.clone());
         let mut author_posts: Vec<u64> = env
             .storage()
@@ -994,6 +992,12 @@ impl LinkoraContract {
             env.storage()
                 .persistent()
                 .remove(&StorageKey::Post(post_id));
+
+            // Clean up associated storage: likes, reports, and tip cooldowns.
+            // Use a generous max_entries since each post's cleanup is small.
+            // This must be done inline to avoid leaving orphaned storage
+            // that would become unreachable once the author key is removed.
+            Self::cleanup_post_associations(env, post_id);
 
             author_posts.remove(i);
             entries_removed += 1;
@@ -3296,6 +3300,8 @@ impl LinkoraContract {
                         }
                         env.storage().persistent().set(&post_key, &post);
                         Self::bump(env, &post_key);
+                        // Update PostLikersCount and clean up the likers index
+                        Self::swap_remove_like_from_index(env, post_id, user_a);
                     }
                 }
             }
@@ -3312,10 +3318,121 @@ impl LinkoraContract {
                         }
                         env.storage().persistent().set(&post_key, &post);
                         Self::bump(env, &post_key);
+                        // Update PostLikersCount and clean up the likers index
+                        Self::swap_remove_like_from_index(env, post_id, user_b);
                     }
                 }
             }
         }
+    }
+
+    /// Swap-remove a user from a post's likers index.
+    /// Scans the PostLikersIdx to find the user's position (O(n) where n =
+    /// the number of likers), then moves the last element into that position
+    /// and decrements PostLikersCount.
+    ///
+    /// This O(n) scan is acceptable because it only runs during
+    /// `block_user`, which is an infrequent operation.
+    fn swap_remove_like_from_index(env: &Env, post_id: u64, user: &Address) {
+        let count_key = StorageKey::PostLikersCount(post_id);
+        let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        if count == 0 {
+            return;
+        }
+
+        // Find the position of the user in the likers index
+        let mut pos: Option<u32> = None;
+        for i in 0..count {
+            let idx_key = StorageKey::PostLikersIdx(post_id, i);
+            if let Some(addr) = env.storage().persistent().get::<_, Address>(&idx_key) {
+                if addr == *user {
+                    pos = Some(i);
+                    break;
+                }
+            }
+        }
+
+        let pos = match pos {
+            Some(p) => p,
+            None => return, // user not found in index — already cleaned up
+        };
+
+        let last = count - 1;
+
+        if pos != last {
+            // Move the last element into the removed position
+            let last_idx_key = StorageKey::PostLikersIdx(post_id, last);
+            if let Some(last_addr) =
+                env.storage().persistent().get::<_, Address>(&last_idx_key)
+            {
+                let target_idx_key = StorageKey::PostLikersIdx(post_id, pos);
+                env.storage().persistent().set(&target_idx_key, &last_addr);
+                Self::bump(env, &target_idx_key);
+            }
+        }
+
+        // Remove the last index entry and update the count
+        let last_idx_key = StorageKey::PostLikersIdx(post_id, last);
+        env.storage().persistent().remove(&last_idx_key);
+        env.storage().persistent().set(&count_key, &last);
+        Self::bump(env, &count_key);
+    }
+
+    /// Clean up all associated storage for a tombstoned post.
+    /// Removes likes, reports, and tip cooldowns without iterating
+    /// entry-by-entry (uses the batch_cleanup_post logic inline).
+    /// Called during batch_cleanup_profile to ensure authored posts'
+    /// associated data isn't orphaned.
+    fn cleanup_post_associations(env: &Env, post_id: u64) {
+        // Clean up Likes
+        let likes_count_key = StorageKey::PostLikersCount(post_id);
+        let likes_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&likes_count_key)
+            .unwrap_or(0);
+        for i in 0..likes_count {
+            let idx_key = StorageKey::PostLikersIdx(post_id, i);
+            if let Some(liker) = env.storage().persistent().get::<_, Address>(&idx_key) {
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::Like(post_id, liker));
+            }
+            env.storage().persistent().remove(&idx_key);
+        }
+        env.storage().persistent().remove(&likes_count_key);
+
+        // Clean up Reports
+        let reports_count_key = StorageKey::ReportCount(post_id);
+        let reports_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&reports_count_key)
+            .unwrap_or(0);
+        for i in 0..reports_count {
+            let idx_key = StorageKey::PostReportersIdx(post_id, i);
+            if let Some(reporter) = env.storage().persistent().get::<_, Address>(&idx_key) {
+                env.storage()
+                    .persistent()
+                    .remove(&StorageKey::Report(post_id, reporter));
+            }
+            env.storage().persistent().remove(&idx_key);
+        }
+        env.storage().persistent().remove(&reports_count_key);
+
+        // Clean up Tip Cooldowns
+        let tc_count_key = StorageKey::PostTipCooldownsCount(post_id);
+        let tc_count: u32 = env.storage().persistent().get(&tc_count_key).unwrap_or(0);
+        for i in 0..tc_count {
+            let idx_key = StorageKey::PostTipCooldownsIdx(post_id, i);
+            if let Some(tipper) = env.storage().persistent().get::<_, Address>(&idx_key) {
+                env.storage()
+                    .temporary()
+                    .remove(&StorageKey::TipCooldown(post_id, tipper));
+            }
+            env.storage().persistent().remove(&idx_key);
+        }
+        env.storage().persistent().remove(&tc_count_key);
     }
 
     // ── Adjacency-set helpers (ADR-001) ───────────────────────────────────
