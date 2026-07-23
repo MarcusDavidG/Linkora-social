@@ -3,6 +3,7 @@ import { Pool as PgPool } from "pg";
 import { getStateRoot } from "../../stateRoot";
 import { validateQuery } from "../../middleware/validate";
 import { z } from "zod";
+import { notFoundError } from "@linkora/types/src/errors";
 
 const stateRootQuerySchema = z.object({
   ledger: z.coerce.number({
@@ -23,7 +24,8 @@ export function createStateRootRouter(pg: PgPool): Router {
       const result = await getStateRoot(pg, ledger);
 
       if (!result) {
-        res.status(404).json({ error: `No state root found for ledger ${ledger}` });
+        const err = notFoundError(`No state root found for ledger ${ledger}`);
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
 

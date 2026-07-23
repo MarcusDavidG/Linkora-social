@@ -14,6 +14,12 @@ import {
 import { createConversationId, sanitizeError } from "./utils";
 import { z, ZodError } from "zod";
 import { idempotencyMiddleware } from "./middleware/idempotency";
+import {
+  validationError,
+  unauthorizedError,
+  conflictError,
+  internalError,
+} from "@linkora/types/src/errors";
 
 // ── WebSocket client registry (address → set of sockets) ─────────────────────
 
@@ -62,6 +68,47 @@ interface ConversationMessage {
   created_at: string;
 }
 
+function handleRouteError(error: unknown, requestId: string): { status: number; body: object } {
+  if (error instanceof ZodError) {
+    return {
+      status: 400,
+      body: validationError("Invalid request data", error.errors).toJSON(requestId),
+    };
+  }
+
+  if (error instanceof Error) {
+    if (
+      error.message.includes("Invalid signature") ||
+      error.message.includes("Timestamp") ||
+      error.message.includes("Authentication")
+    ) {
+      return {
+        status: 401,
+        body: unauthorizedError(error.message).toJSON(requestId),
+      };
+    }
+
+    if (error.message.includes("already exists")) {
+      return {
+        status: 409,
+        body: conflictError("Message index already used for this sender-recipient pair").toJSON(requestId),
+      };
+    }
+
+    if (error.message.includes("Invalid cursor")) {
+      return {
+        status: 400,
+        body: validationError(error.message).toJSON(requestId),
+      };
+    }
+  }
+
+  return {
+    status: 500,
+    body: internalError(sanitizeError(error)).toJSON(requestId),
+  };
+}
+
 export function createRouter(database: Database, _authService: AuthService): Router {
   const router = Router();
 
@@ -107,43 +154,8 @@ export function createRouter(database: Database, _authService: AuthService): Rou
         });
       } catch (error) {
         console.error(`[${req.requestId}] Message submission error:`, error);
-
-        if (error instanceof ZodError) {
-          return res.status(400).json({
-            error: "Validation Error",
-            message: "Invalid request data",
-            details: error.errors,
-            requestId: req.requestId,
-          });
-        }
-
-        if (error instanceof Error) {
-          if (
-            error.message.includes("Invalid signature") ||
-            error.message.includes("Timestamp") ||
-            error.message.includes("Authentication")
-          ) {
-            return res.status(401).json({
-              error: "Authentication Failed",
-              message: error.message,
-              requestId: req.requestId,
-            });
-          }
-
-          if (error.message.includes("already exists")) {
-            return res.status(409).json({
-              error: "Conflict",
-              message: "Message index already used for this sender-recipient pair",
-              requestId: req.requestId,
-            });
-          }
-        }
-
-        res.status(500).json({
-          error: "Internal Server Error",
-          message: sanitizeError(error),
-          requestId: req.requestId,
-        });
+        const { status, body } = handleRouteError(error, req.requestId);
+        res.status(status).json(body);
       }
     }
   );
@@ -194,29 +206,8 @@ export function createRouter(database: Database, _authService: AuthService): Rou
         });
       } catch (error) {
         console.error(`[${req.requestId}] Message retrieval error:`, error);
-
-        if (error instanceof ZodError) {
-          return res.status(400).json({
-            error: "Validation Error",
-            message: "Invalid query parameters",
-            details: error.errors,
-            requestId: req.requestId,
-          });
-        }
-
-        if (error instanceof Error && error.message.includes("Invalid cursor")) {
-          return res.status(400).json({
-            error: "Invalid Cursor",
-            message: error.message,
-            requestId: req.requestId,
-          });
-        }
-
-        res.status(500).json({
-          error: "Internal Server Error",
-          message: sanitizeError(error),
-          requestId: req.requestId,
-        });
+        const { status, body } = handleRouteError(error, req.requestId);
+        res.status(status).json(body);
       }
     }
   );
@@ -264,29 +255,8 @@ export function createRouter(database: Database, _authService: AuthService): Rou
         });
       } catch (error) {
         console.error(`[${req.requestId}] Message retrieval error:`, error);
-
-        if (error instanceof ZodError) {
-          return res.status(400).json({
-            error: "Validation Error",
-            message: "Invalid conversation ID or query parameters",
-            details: error.errors,
-            requestId: req.requestId,
-          });
-        }
-
-        if (error instanceof Error && error.message.includes("Invalid cursor")) {
-          return res.status(400).json({
-            error: "Invalid Cursor",
-            message: error.message,
-            requestId: req.requestId,
-          });
-        }
-
-        res.status(500).json({
-          error: "Internal Server Error",
-          message: sanitizeError(error),
-          requestId: req.requestId,
-        });
+        const { status, body } = handleRouteError(error, req.requestId);
+        res.status(status).json(body);
       }
     }
   );
@@ -315,10 +285,11 @@ export function createRouter(database: Database, _authService: AuthService): Rou
       console.error(`[${req.requestId}] Health check error:`, error);
 
       res.status(503).json({
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        error: sanitizeError(error),
-        requestId: req.requestId,
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: sanitizeError(error),
+          requestId: req.requestId,
+        },
       });
     }
   });

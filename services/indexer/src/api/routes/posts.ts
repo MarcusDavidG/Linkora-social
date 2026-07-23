@@ -3,6 +3,7 @@ import { Database } from "../../db";
 import { validateQuery, validateParams } from "../../middleware/validate";
 import { z } from "zod";
 import { cursorPaginationSchema, numericIdStringSchema } from "@linkora/types/src/schemas";
+import { notFoundError, internalError } from "@linkora/types/src/errors";
 
 const listPostsQuerySchema = cursorPaginationSchema.extend({
   author: z.string().optional(),
@@ -43,7 +44,8 @@ export function createPostsRouter(db: Database): Router {
       const postId = BigInt(req.params.id);
       const post = await db.getPost(postId);
       if (!post) {
-        res.status(404).json({ error: "Post not found", code: "NOT_FOUND" });
+        const err = notFoundError("Post not found");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
       res.json(post);
@@ -65,7 +67,8 @@ export function createPostsRouter(db: Database): Router {
         });
       } catch (error) {
         console.error(`Error fetching reports for post ${postId}:`, error);
-        res.status(500).json({ error: "Failed to fetch reports", code: "INTERNAL_ERROR" });
+        const err = internalError("Failed to fetch reports");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
       }
     }
   );

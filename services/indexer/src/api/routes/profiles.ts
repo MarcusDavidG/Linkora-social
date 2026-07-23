@@ -3,6 +3,7 @@ import { Database } from "../../db";
 import { validateParams } from "../../middleware/validate";
 import { z } from "zod";
 import { stellarAddressSchema } from "@linkora/types/src/schemas";
+import { notFoundError } from "@linkora/types/src/errors";
 
 const getProfileParamsSchema = z.object({
   address: stellarAddressSchema,
@@ -19,7 +20,8 @@ export function createProfilesRouter(db: Database): Router {
 
       const profile = await db.getProfile(address);
       if (!profile) {
-        res.status(404).json({ error: "Profile not found", code: "NOT_FOUND" });
+        const err = notFoundError("Profile not found");
+        res.status(err.statusCode).json(err.toJSON(req.context?.requestId));
         return;
       }
 
