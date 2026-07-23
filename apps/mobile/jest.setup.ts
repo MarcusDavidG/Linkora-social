@@ -36,6 +36,55 @@ jest.mock("react-native-reanimated", () => {
   };
 });
 
+// Mock react-native-svg — prevents TurboModuleRegistry.getEnforcing crash in Jest.
+// lucide-react-native renders via react-native-svg; stubbing it here covers both.
+jest.mock("react-native-svg", () => {
+  const stub = () => null;
+  return {
+    __esModule: true,
+    default: stub,
+    Svg: stub,
+    Circle: stub,
+    Ellipse: stub,
+    G: stub,
+    Text: stub,
+    TSpan: stub,
+    TextPath: stub,
+    Path: stub,
+    Polygon: stub,
+    Polyline: stub,
+    Line: stub,
+    Rect: stub,
+    Use: stub,
+    Image: stub,
+    Symbol: stub,
+    Defs: stub,
+    LinearGradient: stub,
+    RadialGradient: stub,
+    Stop: stub,
+    ClipPath: stub,
+    Pattern: stub,
+    Mask: stub,
+    ForeignObject: stub,
+  };
+});
+
+// Mock lucide-react-native — each named icon export becomes a no-op component.
+// Using a Proxy avoids listing every icon individually.
+jest.mock(
+  "lucide-react-native",
+  () =>
+    new Proxy(
+      { __esModule: true },
+      {
+        get: (_target: Record<string, unknown>, name: string) => {
+          if (name === "__esModule") return true;
+          return () => null;
+        },
+      }
+    )
+);
+
 // Global test timeout
 jest.setTimeout(10000);
 
