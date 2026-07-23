@@ -57,7 +57,9 @@ test("search renders post and profile results from the NavBar", async ({ page })
 
   await page.goto("/");
 
-  await page.getByRole("search").first().locator("input").fill("stellar");
+  const searchInput = page.getByRole("search").first().locator("input");
+  await searchInput.focus();
+  await searchInput.fill("stellar");
   await page.getByRole("search").first().getByRole("button", { name: "Search" }).click();
 
   await expect(page).toHaveURL(/\/search\?q=stellar/);
