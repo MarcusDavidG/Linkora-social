@@ -6058,9 +6058,9 @@ fn test_delete_profile_updates_counters() {
     client.delete_profile(&user);
     client.batch_cleanup_profile(&user, &100);
 
-    // Follower's following count should be 0
-    let following = client.get_following_count(&follower);
-    assert_eq!(following, 0);
+    // Follower's following list should be empty
+    let following = client.get_following(&follower, &0, &1);
+    assert_eq!(following.len(), 0);
 }
 
 #[test]
@@ -6430,9 +6430,21 @@ fn test_block_multiple_likes_then_delete_cleanup() {
     let liker1 = Address::generate(&env);
     let liker2 = Address::generate(&env);
     let liker3 = Address::generate(&env);
-    client.set_profile(&liker1, &String::from_str(&env, "liker1"), &Address::generate(&env));
-    client.set_profile(&liker2, &String::from_str(&env, "liker2"), &Address::generate(&env));
-    client.set_profile(&liker3, &String::from_str(&env, "liker3"), &Address::generate(&env));
+    client.set_profile(
+        &liker1,
+        &String::from_str(&env, "liker1"),
+        &Address::generate(&env),
+    );
+    client.set_profile(
+        &liker2,
+        &String::from_str(&env, "liker2"),
+        &Address::generate(&env),
+    );
+    client.set_profile(
+        &liker3,
+        &String::from_str(&env, "liker3"),
+        &Address::generate(&env),
+    );
     client.like_post(&liker1, &post_id);
     client.like_post(&liker2, &post_id);
     client.like_post(&liker3, &post_id);

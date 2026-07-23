@@ -971,7 +971,7 @@ impl LinkoraContract {
         env.storage()
             .persistent()
             .set(&following_count_key, &following_count);
-        Self::bump(&env, &following_count_key);            // Cleanup Authored Posts
+        Self::bump(&env, &following_count_key); // Cleanup Authored Posts
         let author_key = StorageKey::AuthorPosts(user.clone());
         let mut author_posts: Vec<u64> = env
             .storage()
@@ -997,7 +997,7 @@ impl LinkoraContract {
             // Use a generous max_entries since each post's cleanup is small.
             // This must be done inline to avoid leaving orphaned storage
             // that would become unreachable once the author key is removed.
-            Self::cleanup_post_associations(env, post_id);
+            Self::cleanup_post_associations(&env, post_id);
 
             author_posts.remove(i);
             entries_removed += 1;
@@ -3362,9 +3362,7 @@ impl LinkoraContract {
         if pos != last {
             // Move the last element into the removed position
             let last_idx_key = StorageKey::PostLikersIdx(post_id, last);
-            if let Some(last_addr) =
-                env.storage().persistent().get::<_, Address>(&last_idx_key)
-            {
+            if let Some(last_addr) = env.storage().persistent().get::<_, Address>(&last_idx_key) {
                 let target_idx_key = StorageKey::PostLikersIdx(post_id, pos);
                 env.storage().persistent().set(&target_idx_key, &last_addr);
                 Self::bump(env, &target_idx_key);
