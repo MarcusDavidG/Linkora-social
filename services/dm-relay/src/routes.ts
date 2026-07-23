@@ -13,7 +13,6 @@ import {
 } from "./validation";
 import { createConversationId, sanitizeError } from "./utils";
 import { z, ZodError } from "zod";
-import { StrKey } from "@stellar/stellar-sdk";
 import { idempotencyMiddleware } from "./middleware/idempotency";
 
 // ── WebSocket client registry (address → set of sockets) ─────────────────────
@@ -162,7 +161,11 @@ export function createRouter(database: Database, _authService: AuthService): Rou
           beforeDate = parseCursor(query.cursor);
         }
 
-        const messages = await database.getMessagesByRecipient(address, query.limit + 1, beforeDate);
+        const messages = await database.getMessagesByRecipient(
+          address,
+          query.limit + 1,
+          beforeDate
+        );
 
         const hasMore = messages.length > query.limit;
         const returnMessages = hasMore ? messages.slice(0, query.limit) : messages;
