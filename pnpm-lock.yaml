@@ -304,6 +304,9 @@ importers:
       linkora-sdk:
         specifier: workspace:*
         version: link:../sdk
+      zod:
+        specifier: ^3.24.4
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -311,6 +314,9 @@ importers:
 
   services/analytics-oracle:
     dependencies:
+      "@linkora/types":
+        specifier: workspace:*
+        version: link:../../packages/types
       "@noble/ed25519":
         specifier: 2.1.0
         version: 2.1.0
@@ -326,12 +332,18 @@ importers:
       express:
         specifier: 4.21.2
         version: 4.21.2
+      express-rate-limit:
+        specifier: ^7.3.1
+        version: 7.5.1(express@4.21.2)
       pg:
         specifier: 8.13.3
         version: 8.13.3
       pino:
         specifier: ^10.3.1
         version: 10.3.1
+      zod:
+        specifier: ^3.24.4
+        version: 3.25.76
     devDependencies:
       "@types/express":
         specifier: 5.0.3
@@ -369,6 +381,9 @@ importers:
 
   services/dm-relay:
     dependencies:
+      "@linkora/types":
+        specifier: workspace:*
+        version: link:../../packages/types
       "@noble/hashes":
         specifier: ^1.8.0
         version: 1.8.0
@@ -457,6 +472,9 @@ importers:
 
   services/indexer:
     dependencies:
+      "@linkora/types":
+        specifier: workspace:*
+        version: link:../../packages/types
       "@stellar/stellar-sdk":
         specifier: ^15.1.0
         version: 15.1.0
@@ -490,6 +508,9 @@ importers:
       ws:
         specifier: ^8.18.0
         version: 8.21.0
+      zod:
+        specifier: ^3.24.4
+        version: 3.25.76
     devDependencies:
       "@types/express":
         specifier: ^4.17.21
@@ -15665,9 +15686,7 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - "@babel/core"
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   "@react-native/normalize-colors@0.86.0": {}
 
@@ -18737,6 +18756,10 @@ snapshots:
       - utf-8-validate
 
   exponential-backoff@3.1.3: {}
+
+  express-rate-limit@7.5.1(express@4.21.2):
+    dependencies:
+      express: 4.21.2
 
   express-rate-limit@7.5.1(express@4.22.2):
     dependencies:
