@@ -90,6 +90,7 @@ export async function connectWallet(page: Page): Promise<void> {
   }
 
   await expect(connectButton).toBeVisible({ timeout: 10000 });
+  await connectButton.click();
   await waitForWalletConnection(page);
 }
 

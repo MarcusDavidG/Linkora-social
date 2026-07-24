@@ -38,7 +38,7 @@ jobs:
           echo "NEXT_PUBLIC_CONTRACT_ID=CBQHLSNMBF4HS3UX2PV72T75V2SXE7M2EZZTQ6YC5DSXIGGY4NPSAFAF" >> $GITHUB_ENV
 
       - name: Build web application
-        run: pnpm --filter web build
+        run: pnpm --filter apps-web build
 
       - name: Run E2E tests
         working-directory: apps/web
