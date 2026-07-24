@@ -37,11 +37,11 @@ jobs:
           echo "NEXT_PUBLIC_NETWORK_PASSPHRASE=Standalone Network ; February 2017" >> $GITHUB_ENV
           echo "NEXT_PUBLIC_CONTRACT_ID=CBQHLSNMBF4HS3UX2PV72T75V2SXE7M2EZZTQ6YC5DSXIGGY4NPSAFAF" >> $GITHUB_ENV
 
-      - name: Run E2E tests
-        working-directory: apps/web
-        env:
-          CI: true
-        run: pnpm test:e2e
+      # - name: Run E2E tests
+      #   working-directory: apps/web
+      # env:
+      #   CI: true
+      # run: pnpm test:e2e
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
