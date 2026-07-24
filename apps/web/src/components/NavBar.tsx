@@ -7,7 +7,7 @@ import { useWallet } from "@/hooks/useWallet";
 import SearchBar from "@/components/SearchBar";
 import { BottomNav } from "@/components/mobile/BottomNav";
 import { useNotificationsContext } from "@/contexts/NotificationsContext";
-import { PostComposeModal } from "./PostComposeModal";
+import { CreatePostModal } from "@/components/modals/CreatePostModal";
 import { useKeyboardShortcutsContext } from "@/contexts/KeyboardShortcutsContext";
 import {
   getStoredThemePreference,
@@ -296,10 +296,10 @@ export function NavBar() {
       </nav>
 
       {/* Compose Modal */}
-      <PostComposeModal
+      <CreatePostModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        publicKey={address}
+        author={address}
       />
 
       <BottomNav onCompose={() => setIsModalOpen(true)} />
