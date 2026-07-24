@@ -5,7 +5,7 @@
  * access to the plaintext content. Authentication is via Stellar signatures.
  */
 
-import { Keypair } from "@stellar/stellar-sdk";
+import { Keypair } from "@stellar/stellar-base";
 import { sha256 } from "@noble/hashes/sha256";
 
 export interface RelayMessage {
